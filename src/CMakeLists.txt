@@ -103,6 +103,7 @@ extract_version_components("${version_txt}" "VTKh")
 determine_version(${VTKh_SOURCE_DIR} "${GIT_EXECUTABLE}" "VTKh")
 #------------------------------------------------------------------------------
 
+set(CUDA_LINK_WITH_NVCC ON)
 add_subdirectory(vtkh)
 
 #------------------------------------------------------------------------------

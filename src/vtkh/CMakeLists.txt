@@ -4,6 +4,11 @@
 add_subdirectory(utils)
 add_subdirectory(thirdparty_builtin)
 
+#if(NOT BUILD_SHARED_LIBS AND ENABLE_CUDA)
+#  message(STATUS "**LINK NVCC**")
+#  set (CUDA_LINK_WITH_NVCC ON CACHE BOOL "" )
+#endif()
+
 set(vtkh_core_headers
   DataSet.hpp
   Error.hpp
@@ -40,6 +45,10 @@ if(CUDA_FOUND AND NOT ENABLE_SHARED_LIBS)
   set_target_properties(vtkh_core PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
 endif()
 
+#if(CUDA_FOUND)
+#  set_target_properties(vtkh_core PROPERTIES LINKER_LANGUAGE CUDA)
+#endif()
+
 # Install libraries
 install(TARGETS vtkh_core
   EXPORT ${VTKh_EXPORT_NAME}
@@ -71,7 +80,11 @@ if(MPI_FOUND)
 if(CUDA_FOUND AND NOT ENABLE_SHARED_LIBS)
   set_target_properties(vtkh_core_mpi PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
 endif()
- 
+
+if(CUDA_FOUND)
+  set_target_properties(vtkh_core_mpi PROPERTIES LINKER_LANGUAGE CUDA)
+endif()
+
   blt_add_target_compile_flags(TO vtkh_core_mpi FLAGS "-DVTKH_PARALLEL")
 
   # Install libraries
