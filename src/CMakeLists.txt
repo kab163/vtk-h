@@ -2,16 +2,17 @@
 # See License.txt
 #==============================================================================
 
+project(VTKh)
+cmake_minimum_required(VERSION 3.9)
 ################################
 # cmake policy selections
 ################################
 # avoid warnings for project commands w/o VERSION
 cmake_policy(SET CMP0048 NEW)
-
 ################################
 # VTK-h
 ################################
-project(VTKh)
+#find_package(CUDA)
 
 set(VTKh_EXPORT_NAME "VTKhTargets")
 if (NOT DEFINED VTKh_INSTALL_INCLUDE_DIR)
@@ -56,6 +57,7 @@ if(ENABLE_CUDA AND BUILD_SHARED_LIBS)
   message(FATAL_ERROR "Static libraries are required when building with CUDA")
 endif()
 set (CUDA_SEPARABLE_COMPILATION ON CACHE BOOL "" )
+set (CMAKE_CUDA_CREATE_SHARED_LIBRARY /usr/local/cuda/lib/)
 # enforce the version after the ENABLE Cuda option
 if(ENABLE_CUDA)
   cmake_minimum_required(VERSION 3.14)

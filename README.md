@@ -19,3 +19,10 @@ License
 ===========
 
 VTK-h is released under [3-clause BSD license](/LICENSE).
+
+============
+#get up to date with master
+
+git remote add upstream https://github.com/Alpine-DAV/vtk-h.git
+git fetch upstream
+git pull upstream develop
