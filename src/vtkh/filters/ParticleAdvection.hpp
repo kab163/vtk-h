@@ -8,12 +8,11 @@
 #include <algorithm>
 
 #include <vtkh/vtkh.hpp>
-#include <vtkh/utils/StatisticsDB.hpp>
+#include <vtkh/StatisticsDB.hpp>
 #include <vtkh/filters/Filter.hpp>
 #include <vtkh/filters/Particle.hpp>
 #include <vtkh/filters/communication/BoundsMap.hpp>
 #include <vtkh/filters/Integrator.hpp>
-#include <vtkh/utils/StatisticsDB.hpp>
 #include <vtkh/DataSet.hpp>
 
 #ifdef VTKH_PARALLEL
@@ -85,7 +84,7 @@ public:
                         std::list<Particle> &I,
                         std::list<Particle> &T,
                         std::list<Particle> &A,
-                        vector<ResultT> &traces);
+                        std::vector<ResultT> &traces);
 
 protected:
   void PreExecute() override;
@@ -130,7 +129,7 @@ protected:
   std::list<Particle> active, inactive, terminated;
   bool GetActiveParticles(std::vector<Particle> &v);
 
-  void DumpTraces(int ts, const vector<vtkm::Vec<double,4>> &particleTraces);
+  void DumpTraces(int ts, const std::vector<vtkm::Vec<double,4>> &particleTraces);
   void DumpDS(int ts);
   void DumpSLOutput(vtkm::cont::DataSet *ds, int domId, int ts);
 };

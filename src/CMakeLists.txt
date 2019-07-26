@@ -5,14 +5,24 @@
 project(VTKh)
 cmake_minimum_required(VERSION 3.9)
 ################################
-# cmake policy selections
-################################
-# avoid warnings for project commands w/o VERSION
-cmake_policy(SET CMP0048 NEW)
-################################
 # VTK-h
 ################################
+<<<<<<< HEAD
+# avoid warnings for project commands w/o VERSION
+cmake_policy(SET CMP0048 NEW)
+=======
+project(VTKh)
+
+>>>>>>> d868120c2594754569ecfb10fb1a97a490fc9155
+################################
+# cmake policy selections
+################################
+<<<<<<< HEAD
 #find_package(CUDA)
+=======
+# avoid warnings for project commands w/o VERSION
+cmake_policy(SET CMP0048 NEW)
+>>>>>>> d868120c2594754569ecfb10fb1a97a490fc9155
 
 set(VTKh_EXPORT_NAME "VTKhTargets")
 if (NOT DEFINED VTKh_INSTALL_INCLUDE_DIR)
