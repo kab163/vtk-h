@@ -10,6 +10,7 @@
 #include <vtkh/DataSet.hpp>
 #include <vtkh/filters/ParticleAdvection.hpp>
 #include <vtkm/io/writer/VTKDataSetWriter.h>
+#include <vtkm/io/reader/VTKDataSetReader.h>
 #include <vtkm/cont/DataSet.h>
 #include <vtkm/cont/DataSetFieldAdd.h>
 #include "t_test_utils.hpp"
@@ -62,21 +63,52 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
   vtkh::DataSet data_set;
   const int base_size = 32;
   const int blocks_per_rank = 1;
-  const int maxAdvSteps = 100;
+  const int maxAdvSteps = 1000;
   const int num_blocks = comm_size * blocks_per_rank;
+  
+  std::string fieldName = "vector_data_Float64";
+  if(0) {
+    for(int i = 0; i < blocks_per_rank; ++i)
+    {
+      int domain_id = rank * blocks_per_rank + i;
+      data_set.AddDomain(CreateTestDataRectilinear(domain_id, num_blocks, base_size), domain_id);
+    }
+  } else {
+    fieldName = "grad";
+    char fname[64];
+    int dom = rank;
+    if (comm_size == 2)
+        dom = (rank == 0 ? 0 : 3);
 
-  for(int i = 0; i < blocks_per_rank; ++i)
-  {
-    int domain_id = rank * blocks_per_rank + i;
-    data_set.AddDomain(CreateTestDataRectilinear(domain_id, num_blocks, base_size), domain_id);
+    //This is so that I can run on my laptop - ensures that 4 ranks together get the bottom half of domain
+    if (rank == 0)
+      sprintf(fname, "/Users/1a8/Documents/vtkh_build/fish8/fish_8.%01d.vtk", 1);
+    else if (rank == 1)
+      sprintf(fname, "/Users/1a8/Documents/vtkh_build/fish8/fish_8.%01d.vtk", 2);
+    else if (rank == 2)
+      sprintf(fname, "/Users/1a8/Documents/vtkh_build/fish8/fish_8.%01d.vtk", 4);
+    else if (rank == 3)
+      sprintf(fname, "/Users/1a8/Documents/vtkh_build/fish8/fish_8.%01d.vtk", 6);
+
+    //sprintf(fname, "/Users/1a8/Documents/vtkh_build/fish8/fish_8.%01d.vtk", dom);
+
+    std::cout<<"LOADING: "<<fname<<std::endl;
+    vtkm::io::reader::VTKDataSetReader reader(fname);
+    auto ds = reader.ReadDataSet();
+    vtkm::cont::ArrayHandle<vtkm::Vec<double,3>> field;
+    ds.GetField(fieldName).GetData().CopyTo(field);
+    auto fportal = ds.GetField(fieldName).GetData();
+    int nVecs = fportal.GetNumberOfValues();
+    data_set.AddDomain(ds, rank);
   }
 
   vtkh::ParticleAdvection streamline;
   streamline.SetInput(&data_set);
-  streamline.SetField("vector_data_Float64");
+  streamline.SetField(fieldName);
   streamline.SetMaxSteps(maxAdvSteps);
-  streamline.SetStepSize(0.1);
-  streamline.SetSeedsRandomWhole(500);
+  streamline.SetStepSize(0.0001);
+  streamline.SetSeedsRandomWhole(100);
+  streamline.SetUseThreadedVersion(true);
   streamline.Update();
   vtkh::DataSet *streamline_output = streamline.GetOutput();
 

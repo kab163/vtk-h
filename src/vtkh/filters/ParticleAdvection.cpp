@@ -49,7 +49,7 @@ ParticleAdvection::ParticleAdvection()
       numSeeds(1000), totalNumSeeds(-1), randSeed(314),
       stepSize(.01),
       maxSteps(1000),
-      useThreadedVersion(false),
+      useThreadedVersion(true),
       gatherTraces(true),
       dumpOutputFiles(false),
       sleepUS(100)
@@ -82,6 +82,7 @@ void ParticleAdvection::PreExecute()
     this->m_input->GetDomain(i, dom, id);
 
     dataBlocks.push_back(new DataBlockIntegrator(id, &dom, m_field_name, stepSize));
+    dataBlocks.push_back(new DataBlockIntegrator(id + 1000, &dom, m_field_name, stepSize));
     boundsMap.AddBlock(id, dom.GetCoordinateSystem().GetBounds());
   }
 
@@ -98,9 +99,9 @@ void ParticleAdvection::TraceMultiThread(std::vector<ResultT> &traces)
 {
 #ifdef VTKH_PARALLEL
   MPI_Comm mpiComm = MPI_Comm_f2c(vtkh::GetMPICommHandle());
-
+  
   vtkh::ParticleAdvectionTask<ResultT> *task = new vtkh::ParticleAdvectionTask<ResultT>(mpiComm, boundsMap, this);
-
+  //task->OracleInit(stepSize, seedMethod, maxSteps, numSeeds);
   task->Init(active, totalNumSeeds, sleepUS);
   task->Go();
   task->results.Get(traces);
@@ -454,8 +455,10 @@ ParticleAdvection::Init()
   //Initialize timers/counters.
   ADD_TIMER("total");
   ADD_TIMER("sleep");
-  ADD_TIMER("advect");
-  ADD_COUNTER("advectSteps");
+  ADD_TIMER("advectC");
+  ADD_TIMER("advectG");
+  ADD_COUNTER("advectStepsC");
+  ADD_COUNTER("advectStepsG");
   ADD_COUNTER("myParticles");
   ADD_COUNTER("naps");
 
