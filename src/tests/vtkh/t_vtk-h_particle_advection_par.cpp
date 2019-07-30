@@ -107,7 +107,7 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
   streamline.SetField(fieldName);
   streamline.SetMaxSteps(maxAdvSteps);
   streamline.SetStepSize(0.0001);
-  streamline.SetSeedsRandomWhole(100);
+  streamline.SetSeedsRandomWhole(1000);
   streamline.SetUseThreadedVersion(true);
   streamline.Update();
   vtkh::DataSet *streamline_output = streamline.GetOutput();

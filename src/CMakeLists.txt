@@ -50,6 +50,7 @@ option(BUILD_SHARED_LIBS  "Build shared libraries"    ON)
 option(ENABLE_TESTS       "Build tests"               ON)
 option(ENABLE_CUDA        "Enable CUDA Support"       OFF)
 option(ENABLE_MPI         "Build MPI Support"         ON)
+option(ENABLE_OPENMP      "Build OpenMP Support"      OFF)
 
 if(ENABLE_CUDA AND BUILD_SHARED_LIBS)
   message(FATAL_ERROR "Static libraries are required when building with CUDA")
