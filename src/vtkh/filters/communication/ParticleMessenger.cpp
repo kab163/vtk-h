@@ -270,7 +270,7 @@ ParticleMessenger::Exchange(std::list<vtkh::Particle> &outData,
   {
     std::vector<std::vector<int>> blockIds;
     boundsMap.FindBlockIDs(outData, blockIds, true);
-    DBG("-----O.blockIds: "<<outData<<" "<<blockIds<<endl);
+    DBG("-----O.blockIds: "<<outData<<" "<<blockIds<<std::endl);
 
     auto bit = blockIds.begin();
     for (auto lit = outData.begin(); lit != outData.end(); lit++, bit++)

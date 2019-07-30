@@ -483,7 +483,7 @@ ParticleAdvection::BoxOfSeeds(const vtkm::Bounds &box,
   float boxRange[6] = {(float)box.X.Min, (float)box.X.Max,
                        (float)box.Y.Min, (float)box.Y.Max,
                        (float)box.Z.Min, (float)box.Z.Max};
-  DBG("Box of Seeds: N= "<<numSeeds<<" "<<box<<std::endl);
+  //DBG("Box of Seeds: N= "<<numSeeds<<" "<<box<<std::endl);
   //shrink by 5%
   if (shrink)
   {
