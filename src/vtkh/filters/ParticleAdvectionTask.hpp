@@ -65,7 +65,7 @@ public:
         sleepUS = _sleepUS;
         
         //KB change
-        if(0) { // (TNumParts && TMaxSteps) || (TSeedMeth && TNumRanks && TStepSize)) {
+        if((TNumParts && TMaxSteps) || (TSeedMeth && TStepSize)) {
           activeG.Assign(particles); //what about assigning to GPU? May need another "Oracle"-like thing here
           DBG("Oracle started with GPU"<<std::endl);
         } else {
@@ -80,16 +80,16 @@ public:
     //KB change
     void OracleInit (float PAstepsize, int PAseedmethod, int PAmaxsteps, int PAnumseeds)
     {
-        if(PAstepsize > .05) TStepSize = 1;
+        if(PAstepsize < .01) TStepSize = 1;
         else TStepSize = 0;
 
         if(PAseedmethod == 0 || PAseedmethod == 1) TSeedMeth = 1;
         else TSeedMeth = 0;
 
-        if(PAmaxsteps > 1000) TMaxSteps = 1;
+        if(PAmaxsteps > 100) TMaxSteps = 1;
         else TMaxSteps = 0;
 
-        if(m_NumRanks > 10) TNumRanks == 1;
+        if(m_NumRanks > 2) TNumRanks == 1;
         else TNumRanks == 0;
 
         if(PAnumseeds > 1000) TNumParts == 1;
@@ -270,7 +270,7 @@ public:
             int numTerm = term.size() + numTermMessages;
 
             if (!in.empty()) {
-             if(in.size() > 0) { //kind of acts like an Oracle, add other conditions later
+             if(in.size() < 10) { //kind of acts like an Oracle, add other conditions later
                DBG("Adding to CPU"<<std::endl);
                  activeC.Insert(in);
                } else {

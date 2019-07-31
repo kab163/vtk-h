@@ -86,6 +86,7 @@ public:
                         std::list<Particle> &A,
                         std::vector<ResultT> &traces);
 
+
 protected:
   void PreExecute() override;
   void PostExecute() override;
