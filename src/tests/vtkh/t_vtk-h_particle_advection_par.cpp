@@ -65,7 +65,6 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
   const int blocks_per_rank = 1;
   const int maxAdvSteps = 1000;
   const int num_blocks = comm_size * blocks_per_rank;
-  int dom;
   
   std::string fieldName = "vector_data_Float64";
   if(0) {
@@ -77,7 +76,7 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
   } else {
     fieldName = "grad";
     char fname[64];
-    dom = rank;
+    int dom = rank;
     if (comm_size == 2)
         dom = (rank == 0 ? 0 : 3);
 
