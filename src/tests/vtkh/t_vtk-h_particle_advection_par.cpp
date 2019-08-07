@@ -3,7 +3,6 @@
 /// file: t_vtk-h_particle_advection_par.cpp
 ///
 //-----------------------------------------------------------------------------
-//KB test if this works...
 #include "gtest/gtest.h"
 
 #include <vtkh/vtkh.hpp>
@@ -110,6 +109,7 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
   streamline.SetSeedsRandomWhole(1000);
   streamline.SetUseThreadedVersion(true);
   streamline.SetDumpOutputFiles(false);
+  streamline.SetGatherTraces(true);
   streamline.Update();
   vtkh::DataSet *streamline_output = streamline.GetOutput();
 
