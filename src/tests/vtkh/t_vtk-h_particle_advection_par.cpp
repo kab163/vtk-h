@@ -79,17 +79,7 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
     if (comm_size == 2)
         dom = (rank == 0 ? 0 : 3);
 
-    //This is so that I can run on my laptop - ensures that 4 ranks together get the bottom half of domain
-    if (rank == 0)
-      sprintf(fname, "/Users/1a8/Documents/vtkh_build/fish8/fish_8.%01d.vtk", 1);
-    else if (rank == 1)
-      sprintf(fname, "/Users/1a8/Documents/vtkh_build/fish8/fish_8.%01d.vtk", 2);
-    else if (rank == 2)
-      sprintf(fname, "/Users/1a8/Documents/vtkh_build/fish8/fish_8.%01d.vtk", 4);
-    else if (rank == 3)
-      sprintf(fname, "/Users/1a8/Documents/vtkh_build/fish8/fish_8.%01d.vtk", 6);
-
-    //sprintf(fname, "/Users/1a8/Documents/vtkh_build/fish8/fish_8.%01d.vtk", dom);
+    sprintf(fname, "/ccs/home/kristib/backup_fish8/fish_8.%01d.vtk", dom);
 
     std::cout<<"LOADING: "<<fname<<std::endl;
     vtkm::io::reader::VTKDataSetReader reader(fname);

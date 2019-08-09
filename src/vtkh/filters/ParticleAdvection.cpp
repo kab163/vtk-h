@@ -115,10 +115,11 @@ ParticleAdvection::InternalIntegrate<vtkm::worklet::ParticleAdvectionResult>(Dat
                                      std::list<Particle> &I,
                                      std::list<Particle> &T,
                                      std::list<Particle> &A,
-                                     std::vector<vtkm::worklet::ParticleAdvectionResult> &traces
+                                     std::vector<vtkm::worklet::ParticleAdvectionResult> &traces,
+                                     int flag
                                      )
 {
-  return blk.integrator.Advect(v, maxSteps, I, T, A, &traces);
+  return blk.integrator.Advect(v, maxSteps, I, T, A, &traces, flag);
 }
 
 template<>

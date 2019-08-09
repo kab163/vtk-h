@@ -54,7 +54,8 @@ public:
                std::list<vtkh::Particle> &I,
                std::list<vtkh::Particle> &T,
                std::list<vtkh::Particle> &A,
-               std::vector<vtkm::worklet::ParticleAdvectionResult> *particleTraces=NULL)
+               std::vector<vtkm::worklet::ParticleAdvectionResult> *particleTraces=NULL,
+               int flag)
     {
         size_t nSeeds = particles.size();
         vtkm::cont::ArrayHandle<vtkm::Vec<FieldType,3>> seedArray;
@@ -65,7 +66,7 @@ public:
         vtkm::worklet::ParticleAdvection particleAdvection;
         vtkm::worklet::ParticleAdvectionResult result;
 
-        result = particleAdvection.Run(rk4, seedArray, stepsTakenArray, maxSteps);
+        result = particleAdvection.Run(rk4, seedArray, stepsTakenArray, maxSteps, flag);
         auto posPortal = result.positions.GetPortalConstControl();
         auto statusPortal = result.status.GetPortalConstControl();
         auto stepsPortal = result.stepsTaken.GetPortalConstControl();

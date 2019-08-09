@@ -187,7 +187,7 @@ public:
 
                 TIMER_START("advectC");
                 WDBG("CPU WORKER: Integrate "<<particlesC<<" --> "<<std::endl);
-                int n = filter->InternalIntegrate<ResultT>(*blkC, particlesC, I, T, A, tracesC);
+                int n = filter->InternalIntegrate<ResultT>(*blkC, particlesC, I, T, A, tracesC, 0);
                 TIMER_STOP("advectC");
                 COUNTER_INC("advectStepsC", n);
                 WDBG("CPU TIA: "<<T<<" "<<I<<" "<<A<<std::endl<<std::endl);
@@ -227,7 +227,7 @@ public:
 
                 TIMER_START("advectG");
                 WDBG("GPU WORKER: Integrate "<<particlesG<<" --> "<<std::endl);
-                int n = filter->InternalIntegrate<ResultT>(*blkG, particlesG, I, T, A, tracesG);
+                int n = filter->InternalIntegrate<ResultT>(*blkG, particlesG, I, T, A, tracesG, 1);
                 TIMER_STOP("advectG");
                 COUNTER_INC("advectStepsG", n);
                 WDBG("GPU TIA: "<<T<<" "<<I<<" "<<A<<std::endl<<std::endl);
