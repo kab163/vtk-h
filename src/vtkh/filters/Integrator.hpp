@@ -54,8 +54,8 @@ public:
                std::list<vtkh::Particle> &I,
                std::list<vtkh::Particle> &T,
                std::list<vtkh::Particle> &A,
-               std::vector<vtkm::worklet::ParticleAdvectionResult> *particleTraces=NULL,
-               int flag)
+               int flag,
+	       std::vector<vtkm::worklet::ParticleAdvectionResult> *particleTraces=NULL)
     {
         size_t nSeeds = particles.size();
         vtkm::cont::ArrayHandle<vtkm::Vec<FieldType,3>> seedArray;

@@ -119,7 +119,7 @@ ParticleAdvection::InternalIntegrate<vtkm::worklet::ParticleAdvectionResult>(Dat
                                      int flag
                                      )
 {
-  return blk.integrator.Advect(v, maxSteps, I, T, A, &traces, flag);
+  return blk.integrator.Advect(v, maxSteps, I, T, A, flag, &traces);
 }
 
 template<>

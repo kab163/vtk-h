@@ -79,7 +79,7 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
     if (comm_size == 2)
         dom = (rank == 0 ? 0 : 3);
 
-    sprintf(fname, "/ccs/home/kristib/backup_fish8/fish_8.%01d.vtk", dom);
+    sprintf(fname, "/home/users/kab163/backup_fish8/fish_8.%01d.vtk", dom);
 
     std::cout<<"LOADING: "<<fname<<std::endl;
     vtkm::io::reader::VTKDataSetReader reader(fname);
