@@ -67,6 +67,7 @@ public:
         vtkm::worklet::ParticleAdvectionResult result;
 
         result = particleAdvection.Run(rk4, seedArray, stepsTakenArray, maxSteps, flag);
+        //result = particleAdvection.Run(rk4, seedArray, stepsTakenArray, maxSteps);
         auto posPortal = result.positions.GetPortalConstControl();
         auto statusPortal = result.status.GetPortalConstControl();
         auto stepsPortal = result.stepsTaken.GetPortalConstControl();
@@ -108,12 +109,14 @@ public:
               std::list<vtkh::Particle> &I,
               std::list<vtkh::Particle> &T,
               std::list<vtkh::Particle> &A,
+	      int flag,
               std::vector<vtkm::worklet::StreamlineResult> *particleTraces=NULL)
     {
         size_t nSeeds = particles.size();
         vtkm::cont::ArrayHandle<vtkm::Vec<FieldType,3>> seedArray;
         vtkm::cont::ArrayHandle<vtkm::Id> stepsTakenArray;
 
+	if (flag != 0) std::cout<<"there is a problem"<<std::endl;
         int steps0 = SeedPrep(particles, seedArray, stepsTakenArray);
 
         vtkm::worklet::Streamline streamline;
