@@ -65,7 +65,7 @@ public:
         sleepUS = _sleepUS;
         
         //KB change
-        if((TNumParts && TMaxSteps) || (TSeedMeth && TStepSize)) {
+        if(TNumParts && TMaxSteps) || (TSeedMeth && TStepSize)) {
           activeG.Assign(particles); //what about assigning to GPU? May need another "Oracle"-like thing here
           DBG("Oracle started with GPU"<<std::endl);
         } else {
@@ -152,6 +152,7 @@ public:
         workerThreads.push_back(std::thread(ParticleAdvectionTask::cpuWorker, this));
         workerThreads.push_back(std::thread(ParticleAdvectionTask::gpuWorker, this)); //KB change
         this->Manage();
+	for (auto &w : workerThreads)  w.join();
 #endif
     }
 
@@ -173,6 +174,7 @@ public:
     void cpuWork()
     {
       std::vector<ResultT> tracesC;
+      vtkh::ForceSerial();
 
         while (!CheckDone())
         {
@@ -212,6 +214,16 @@ public:
     void gpuWork()
     {
       std::vector<ResultT> tracesG;
+      if(!vtkh::IsCUDAAvailable() || !vtkh::IsCUDAEnabled()) 
+      {
+        std::stringstream msg;
+        msg << "Failed to set up Device Tag CUDA " << std::endl;
+        throw Error(msg.str());
+      }
+      else {
+        vtkh::ForceCUDA();
+	WDBG("Forcing vtkm to run with CUDA"<<std::endl);
+      }
 
         while (!CheckDone())
         {
@@ -246,6 +258,7 @@ public:
         }
         WDBG("GPU WORKER is DONE"<<std::endl);
         results.Insert(tracesG);
+	WDBG("RESULTS size "<<results.Size()<<std::endl);
     }
 
     //KB changes

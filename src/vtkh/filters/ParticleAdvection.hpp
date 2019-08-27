@@ -77,7 +77,7 @@ public:
   int  GetMaxSteps() const { return maxSteps; }
 
   DataBlockIntegrator * GetBlock(int blockId);
-
+/*
   template <typename ResultT>
   int InternalIntegrate(DataBlockIntegrator &blk,
                         std::vector<Particle> &v,
@@ -86,6 +86,7 @@ public:
                         std::list<Particle> &A,
                         std::vector<ResultT> &traces);
  
+*/
   template <typename ResultT>
   int InternalIntegrate(DataBlockIntegrator &blk,
                         std::vector<Particle> &v,
