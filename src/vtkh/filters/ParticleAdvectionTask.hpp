@@ -42,7 +42,6 @@ public:
             communicator.AddLocator(id, ds);
         }
 
-        //KB changes
         ADD_TIMER("CPUworker_sleep");
         ADD_TIMER("GPUworker_sleep");
         ADD_COUNTER("CPUworker_naps");
@@ -64,38 +63,18 @@ public:
         TotalNumParticles = N;
         sleepUS = _sleepUS;
         
-        //KB change
-        if(TNumParts && TMaxSteps) || (TSeedMeth && TStepSize)) {
-          activeG.Assign(particles); //what about assigning to GPU? May need another "Oracle"-like thing here
+        if(N >= 10000) {
+          activeG.Assign(particles); 
           DBG("Oracle started with GPU"<<std::endl);
         } else {
-          activeC.Assign(particles); //maybe all particles should start in one active queue
+          activeC.Assign(particles);
           DBG("Oracle started with CPU instead"<<std::endl);
         }
 
         inactive.Clear();
         terminated.Clear();
     }
-
-    //KB change
-    void OracleInit (float PAstepsize, int PAseedmethod, int PAmaxsteps, int PAnumseeds)
-    {
-        if(PAstepsize < .01) TStepSize = 1;
-        else TStepSize = 0;
-
-        if(PAseedmethod == 0 || PAseedmethod == 1) TSeedMeth = 1;
-        else TSeedMeth = 0;
-
-        if(PAmaxsteps > 100) TMaxSteps = 1;
-        else TMaxSteps = 0;
-
-        if(m_NumRanks > 2) TNumRanks == 1;
-        else TNumRanks == 0;
-
-        if(PAnumseeds > 1000) TNumParts == 1;
-        else TNumParts == 0;
-    }
-
+    
     bool CheckDone()
     {
         bool val;
@@ -145,36 +124,45 @@ public:
             #pragma omp parallel num_threads(numWorkerThreads)
             #pragma omp master
             {
-                this->cpuWork(); //KB change
+                this->cpuWork();
             }
         }
 #else
         workerThreads.push_back(std::thread(ParticleAdvectionTask::cpuWorker, this));
-        workerThreads.push_back(std::thread(ParticleAdvectionTask::gpuWorker, this)); //KB change
+        workerThreads.push_back(std::thread(ParticleAdvectionTask::gpuWorker, this));
         this->Manage();
 	for (auto &w : workerThreads)  w.join();
 #endif
     }
 
-#ifndef VTKH_USE_OPENMP //KB change
+#ifndef VTKH_USE_OPENMP
     static void cpuWorker(ParticleAdvectionTask *t)
     {
-      std::cerr<<"Created CPU thread"<<std::endl;
       t->cpuWork();
     }
 
     static void gpuWorker(ParticleAdvectionTask *t)
     {
-      std::cerr<<"Created GPU thread"<<std::endl;
       t->gpuWork();
     }
 #endif
  
-    //KB changes
     void cpuWork()
     {
       std::vector<ResultT> tracesC;
-      vtkh::ForceSerial();
+      vtkm::cont::RuntimeDeviceTracker &device_tracker
+                                       = vtkm::cont::GetRuntimeDeviceTracker();
+
+      if(device_tracker.CanRunOn(vtkm::cont::DeviceAdapterTagSerial())) {
+        device_tracker.ForceDevice(vtkm::cont::DeviceAdapterTagSerial());
+	WDBG("CPU thread forcing vtkm to run with Device Adapter Tag Serial"<<std::endl);
+      }
+      else
+      {
+        std::stringstream msg;
+        msg << "CPU thread Failed to set up Device Tag Serial " << std::endl;
+        throw Error(msg.str());
+      }
 
         while (!CheckDone())
         {
@@ -187,9 +175,9 @@ public:
 
                 DataBlockIntegrator *blkC = filter->GetBlock(particlesC[0].blockIds[0]);
 
-                TIMER_START("advectC");
                 WDBG("CPU WORKER: Integrate "<<particlesC<<" --> "<<std::endl);
-                int n = filter->InternalIntegrate<ResultT>(*blkC, particlesC, I, T, A, tracesC, 0);
+                TIMER_START("advectC");
+                int n = filter->InternalIntegrate<ResultT>(*blkC, particlesC, I, T, A, tracesC);
                 TIMER_STOP("advectC");
                 COUNTER_INC("advectStepsC", n);
                 WDBG("CPU TIA: "<<T<<" "<<I<<" "<<A<<std::endl<<std::endl);
@@ -210,19 +198,21 @@ public:
         results.Insert(tracesC);
     }
 
-    //KB changes
     void gpuWork()
     {
       std::vector<ResultT> tracesG;
-      if(!vtkh::IsCUDAAvailable() || !vtkh::IsCUDAEnabled()) 
+      vtkm::cont::RuntimeDeviceTracker &device_tracker
+                                       = vtkm::cont::GetRuntimeDeviceTracker();
+
+      if(device_tracker.CanRunOn(vtkm::cont::DeviceAdapterTagCuda())) {
+        device_tracker.ForceDevice(vtkm::cont::DeviceAdapterTagCuda());
+	WDBG("Forcing GPU thread to run vtkm with Device Adapter Tag CUDA"<<std::endl);
+      }
+      else 
       {
         std::stringstream msg;
-        msg << "Failed to set up Device Tag CUDA " << std::endl;
+        msg << "GPU thread Failed to set up Device Adapter Tag CUDA " << std::endl;
         throw Error(msg.str());
-      }
-      else {
-        vtkh::ForceCUDA();
-	WDBG("Forcing vtkm to run with CUDA"<<std::endl);
       }
 
         while (!CheckDone())
@@ -234,12 +224,11 @@ public:
                 
                 COUNTER_INC("GPU", 1);
 
-                //DataBlockIntegrator *blkG = filter->GetBlock(particlesG[0].blockIds[0]);
                 DataBlockIntegrator *blkG = filter->GetBlock(m_Rank + 1000);
 
-                TIMER_START("advectG");
                 WDBG("GPU WORKER: Integrate "<<particlesG<<" --> "<<std::endl);
-                int n = filter->InternalIntegrate<ResultT>(*blkG, particlesG, I, T, A, tracesG, 1);
+                TIMER_START("advectG");
+                int n = filter->InternalIntegrate<ResultT>(*blkG, particlesG, I, T, A, tracesG);
                 TIMER_STOP("advectG");
                 COUNTER_INC("advectStepsG", n);
                 WDBG("GPU TIA: "<<T<<" "<<I<<" "<<A<<std::endl<<std::endl);
@@ -261,7 +250,6 @@ public:
 	WDBG("RESULTS size "<<results.Size()<<std::endl);
     }
 
-    //KB changes
     void Manage()
     {
         DBG("manage_bm: "<<boundsMap<<std::endl);
@@ -283,11 +271,11 @@ public:
             int numTerm = term.size() + numTermMessages;
 
             if (!in.empty()) {
-             if(in.size() < 10) { //kind of acts like an Oracle, add other conditions later
+             if((activeG.Size() + in.size()) < 500) { //in.size() < 10) {
                DBG("Adding to CPU"<<std::endl);
                  activeC.Insert(in);
                } else {
-                 DBG("Adding to GPU<<std::endl");
+                 DBG("Adding to GPU"<<std::endl);
                  activeG.Insert(in);
                }
 
@@ -336,7 +324,7 @@ public:
 
     int numWorkerThreads;
     int sleepUS;
-    bool TStepSize, TMaxSteps, TSeedMeth, TNumParts, TNumRanks;
+    //bool TStepSize, TMaxSteps, TSeedMeth, TNumParts, TNumRanks;
 
     bool done, begin;
     vtkh::Mutex stateLock;

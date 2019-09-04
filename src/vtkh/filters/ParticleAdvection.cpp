@@ -52,7 +52,7 @@ ParticleAdvection::ParticleAdvection()
       useThreadedVersion(true),
       gatherTraces(true),
       dumpOutputFiles(true),
-      sleepUS(100)
+      sleepUS(10)
 {
 #ifdef VTKH_PARALLEL
   rank = vtkh::GetMPIRank();
@@ -101,7 +101,7 @@ void ParticleAdvection::TraceMultiThread(std::vector<ResultT> &traces)
   MPI_Comm mpiComm = MPI_Comm_f2c(vtkh::GetMPICommHandle());
   
   vtkh::ParticleAdvectionTask<ResultT> *task = new vtkh::ParticleAdvectionTask<ResultT>(mpiComm, boundsMap, this);
-  task->OracleInit(stepSize, seedMethod, maxSteps, numSeeds);
+  //task->OracleInit(stepSize, seedMethod, maxSteps, numSeeds);
   task->Init(active, totalNumSeeds, sleepUS);
   task->Go();
   task->results.Get(traces);
@@ -115,11 +115,9 @@ ParticleAdvection::InternalIntegrate<vtkm::worklet::ParticleAdvectionResult>(Dat
                                      std::list<Particle> &I,
                                      std::list<Particle> &T,
                                      std::list<Particle> &A,
-                                     std::vector<vtkm::worklet::ParticleAdvectionResult> &traces,
-                                     int flag
-                                     )
+                                     std::vector<vtkm::worklet::ParticleAdvectionResult> &traces)
 {
-  return blk.integrator.Advect(v, maxSteps, I, T, A, flag, &traces);
+  return blk.integrator.Advect(v, maxSteps, I, T, A, &traces);
 }
 
 template<>
@@ -129,11 +127,9 @@ ParticleAdvection::InternalIntegrate<vtkm::worklet::StreamlineResult>(DataBlockI
                                      std::list<Particle> &I,
                                      std::list<Particle> &T,
                                      std::list<Particle> &A,
-                                     std::vector<vtkm::worklet::StreamlineResult> &traces,
-				     int flag
-                                     )
+                                     std::vector<vtkm::worklet::StreamlineResult> &traces)
 {
-  return blk.integrator.Trace(v, maxSteps, I, T, A, flag, &traces);
+  return blk.integrator.Trace(v, maxSteps, I, T, A, &traces);
 }
 
 template <typename ResultT>
@@ -170,7 +166,7 @@ void ParticleAdvection::TraceSingleThread(std::vector<ResultT> &traces)
           DBG("Loading Block: "<<v[0].blockIds[0]<<std::endl);
 
           TIMER_START("advect");
-          int n = InternalIntegrate<ResultT>(*blk, v, I, T, A, traces, 0);
+          int n = InternalIntegrate<ResultT>(*blk, v, I, T, A, traces);
           TIMER_STOP("advect");
           COUNTER_INC("advectSteps", n);
           DBG("--Integrate:  ITA: "<<I<<" "<<T<<" "<<A<<std::endl);

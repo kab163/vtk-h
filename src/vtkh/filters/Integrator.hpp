@@ -54,7 +54,6 @@ public:
                std::list<vtkh::Particle> &I,
                std::list<vtkh::Particle> &T,
                std::list<vtkh::Particle> &A,
-               int flag,
 	       std::vector<vtkm::worklet::ParticleAdvectionResult> *particleTraces=NULL)
     {
         size_t nSeeds = particles.size();
@@ -66,8 +65,7 @@ public:
         vtkm::worklet::ParticleAdvection particleAdvection;
         vtkm::worklet::ParticleAdvectionResult result;
  
-        result = particleAdvection.Run(rk4, seedArray, stepsTakenArray, maxSteps, flag);
-        //result = particleAdvection.Run(rk4, seedArray, stepsTakenArray, maxSteps);
+        result = particleAdvection.Run(rk4, seedArray, stepsTakenArray, maxSteps);
         auto posPortal = result.positions.GetPortalConstControl();
         auto statusPortal = result.status.GetPortalConstControl();
         auto stepsPortal = result.stepsTaken.GetPortalConstControl();
@@ -109,7 +107,6 @@ public:
               std::list<vtkh::Particle> &I,
               std::list<vtkh::Particle> &T,
               std::list<vtkh::Particle> &A,
-	      int flag,
               std::vector<vtkm::worklet::StreamlineResult> *particleTraces=NULL)
     {
         size_t nSeeds = particles.size();
@@ -120,7 +117,7 @@ public:
         
 	vtkm::worklet::Streamline streamline;
         vtkm::worklet::StreamlineResult result;
-        result = streamline.Run(rk4, seedArray, stepsTakenArray, maxSteps, flag);
+        result = streamline.Run(rk4, seedArray, stepsTakenArray, maxSteps);
         auto posPortal = result.positions.GetPortalConstControl();
         auto statusPortal = result.status.GetPortalConstControl();
         auto stepsPortal = result.stepsTaken.GetPortalConstControl();

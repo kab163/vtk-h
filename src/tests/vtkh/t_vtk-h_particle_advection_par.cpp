@@ -57,7 +57,8 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   vtkh::SetMPICommHandle(MPI_Comm_c2f(MPI_COMM_WORLD));
 
-  std::cout << "Running parallel Particle Advection, vtkh - with " << comm_size << " ranks" << std::endl;
+  if(rank == 0)
+    std::cout << "Running parallel Particle Advection, vtkh - with " << comm_size << " ranks" << std::endl;
 
   vtkh::DataSet data_set;
   const int base_size = 32;
@@ -79,7 +80,11 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
     if (comm_size == 2)
         dom = (rank == 0 ? 0 : 3);
 
-    sprintf(fname, "/home/users/kab163/backup_fish8/fish_8.%01d.vtk", dom);
+    //sprintf(fname, "/home/users/kab163/data/backup_fish8/fish_8.%01d.vtk", dom);
+    //sprintf(fname, "/home/users/kab163/data/fish27VTK/fish27/fish27.%01d.vtk", dom);
+    //sprintf(fname, "/home/users/kab163/data/fusionVTK_64/fusion64.%01d.vtk", dom);
+    sprintf(fname, "/home/users/kab163/data/fusion8VTK/fusion8.%01d.vtk", dom);
+    //sprintf(fname, "/home/users/kab163/data/fusionVTK_27/fusion27.%01d.vtk", dom);
 
     std::cout<<"LOADING: "<<fname<<std::endl;
     vtkm::io::reader::VTKDataSetReader reader(fname);
@@ -96,10 +101,10 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
   streamline.SetField(fieldName);
   streamline.SetMaxSteps(maxAdvSteps);
   streamline.SetStepSize(0.0001);
-  streamline.SetSeedsRandomWhole(1000);
+  streamline.SetSeedsRandomWhole(10000);
   streamline.SetUseThreadedVersion(true);
   streamline.SetDumpOutputFiles(false);
-  streamline.SetGatherTraces(true);
+  streamline.SetGatherTraces(false);
   streamline.Update();
   vtkh::DataSet *streamline_output = streamline.GetOutput();
 
