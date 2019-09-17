@@ -101,8 +101,7 @@ void ParticleAdvection::TraceMultiThread(std::vector<ResultT> &traces)
   MPI_Comm mpiComm = MPI_Comm_f2c(vtkh::GetMPICommHandle());
   
   vtkh::ParticleAdvectionTask<ResultT> *task = new vtkh::ParticleAdvectionTask<ResultT>(mpiComm, boundsMap, this);
-  //task->OracleInit(stepSize, seedMethod, maxSteps, numSeeds);
-  task->Init(active, totalNumSeeds, sleepUS);
+  task->Init(active, totalNumSeeds, sleepUS, maxSteps);
   task->Go();
   task->results.Get(traces);
 #endif

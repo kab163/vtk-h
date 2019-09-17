@@ -57,18 +57,31 @@ public:
 #endif
     }
 
-    void Init(const std::list<Particle> &particles, int N, int _sleepUS)
+    void Init(const std::list<Particle> &particles, int N, int _sleepUS, int steps)
     {
         numWorkerThreads = 1;
         TotalNumParticles = N;
         sleepUS = _sleepUS;
         
-        if(N >= 10000) {
-          activeG.Assign(particles); 
-          DBG("Oracle started with GPU"<<std::endl);
-        } else {
-          activeC.Assign(particles);
-          DBG("Oracle started with CPU instead"<<std::endl);
+        //initialize oracle
+        if(N <= 1000) {
+          activeC.Assign(particles); 
+          DBG("Oracle started with CPU"<<std::endl);
+        } 
+        else if (N >= 4000) { //Note: this problem size with "tiny tiny" duration is a CPU win
+          activeG.Assign(particles);
+          useGPU = 1; //tell manage thread that this rank started on GPU
+          DBG("Oracle started with GPU instead"<<std::endl);
+        }
+        else { 
+          hybridGPU = 1; //tell manage thread that this rank started in hybrid range
+          if (steps <= 250) {
+            activeC.Assign(particles);
+            DBG("Oracle went to hybrid range and started with CPU");
+          } else {
+            activeG.Assign(particles);
+            DBG("Oracle went to hybrid range and started with GPU");
+          }
         }
 
         inactive.Clear();
@@ -253,7 +266,8 @@ public:
     void Manage()
     {
         DBG("manage_bm: "<<boundsMap<<std::endl);
-
+        
+        int almostDone = (TotalNumParticles * .87);
         int N = 0;
 
         DBG("Begin TIA: "<<terminated<<" "<<inactive<<" "<<activeC<<" "<<activeG<<std::endl);
@@ -271,13 +285,22 @@ public:
             int numTerm = term.size() + numTermMessages;
 
             if (!in.empty()) {
-             if((activeG.Size() + in.size()) < 500) { //in.size() < 10) {
-               DBG("Adding to CPU"<<std::endl);
-                 activeC.Insert(in);
-               } else {
-                 DBG("Adding to GPU"<<std::endl);
-                 activeG.Insert(in);
-               }
+              if(useGPU) {
+                activeG.Insert(in);
+                DBG("Adding to GPU"<<std::endl);
+              } else if (hybridGPU) {
+                if (N < almostDone) { //if we aren't almost done, add to GPU
+                  DBG("Adding to hybrid GPU"<<std::endl);
+                  activeG.Insert(in);
+                }
+                else { //we're almost done so start up the CPU
+                  DBG("Adding to hybrid CPU"<<std::endl);
+                  activeC.Insert(in);
+                }
+              } else {
+                DBG("Adding to CPU"<<std::endl);
+                activeC.Insert(in);
+              }
 
                DBG("ActivesC: "<<activeC<<std::endl<<"ActiveG: "<<activeG<<std::endl);
 
@@ -324,7 +347,7 @@ public:
 
     int numWorkerThreads;
     int sleepUS;
-    //bool TStepSize, TMaxSteps, TSeedMeth, TNumParts, TNumRanks;
+    int useGPU = 0, hybridGPU = 0;
 
     bool done, begin;
     vtkh::Mutex stateLock;

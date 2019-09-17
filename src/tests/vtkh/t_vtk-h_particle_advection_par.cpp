@@ -63,7 +63,7 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
   vtkh::DataSet data_set;
   const int base_size = 32;
   const int blocks_per_rank = 1;
-  const int maxAdvSteps = 1000;
+  const int maxAdvSteps = 5000;
   const int num_blocks = comm_size * blocks_per_rank;
   
   std::string fieldName = "vector_data_Float64";
@@ -75,7 +75,7 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
     }
   } else {
     fieldName = "grad";
-    char fname[64];
+    char fname[512];
     int dom = rank;
     if (comm_size == 2)
         dom = (rank == 0 ? 0 : 3);
@@ -83,7 +83,8 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
     //sprintf(fname, "/home/users/kab163/data/backup_fish8/fish_8.%01d.vtk", dom);
     //sprintf(fname, "/home/users/kab163/data/fish27VTK/fish27/fish27.%01d.vtk", dom);
     //sprintf(fname, "/home/users/kab163/data/fusionVTK_64/fusion64.%01d.vtk", dom);
-    sprintf(fname, "/home/users/kab163/data/fusion8VTK/fusion8.%01d.vtk", dom);
+    sprintf(fname, "/gpfs/alpine/scratch/kristib/csc331/data/fusion8_VTK/fusion8.%01d.vtk", dom);
+    //sprintf(fname, "/ccs/home/kristib/data/fusion64_VTK/fusion64.%01d.vtk", dom); 
     //sprintf(fname, "/home/users/kab163/data/fusionVTK_27/fusion27.%01d.vtk", dom);
 
     std::cout<<"LOADING: "<<fname<<std::endl;
@@ -100,8 +101,8 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
   streamline.SetInput(&data_set);
   streamline.SetField(fieldName);
   streamline.SetMaxSteps(maxAdvSteps);
-  streamline.SetStepSize(0.0001);
-  streamline.SetSeedsRandomWhole(10000);
+  streamline.SetStepSize(0.001);
+  streamline.SetSeedsRandomWhole(2744);
   streamline.SetUseThreadedVersion(true);
   streamline.SetDumpOutputFiles(false);
   streamline.SetGatherTraces(false);
