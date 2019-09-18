@@ -15,6 +15,8 @@
 #define WDBG(msg)
 #endif
 
+#define ORACLE1
+
 namespace vtkh
 {
 template <typename ResultT>
@@ -62,7 +64,8 @@ public:
         numWorkerThreads = 1;
         TotalNumParticles = N;
         sleepUS = _sleepUS;
-        
+        int everyN = N / 8;        
+
         //initialize oracle
         if(N <= 1000) {
           activeC.Assign(particles); 
@@ -75,13 +78,32 @@ public:
         }
         else { 
           hybridGPU = 1; //tell manage thread that this rank started in hybrid range
-          if (steps <= 250) {
+#ifndef ORACLE3          
+          if (steps <= 250) { //initialize oracle1 or oracle2
             activeC.Assign(particles);
             DBG("Oracle went to hybrid range and started with CPU");
           } else {
             activeG.Assign(particles);
             DBG("Oracle went to hybrid range and started with GPU");
           }
+#else
+          //initialize oracle3
+          std::list<Particle> gpuList;
+          std::list<Particle> cpuList;
+          int i = 0;
+          for(auto it = particles.cbegin(); it != particles.cend(); it++) {
+            if(i % 10 == 0) {
+              cpuList.push_front(*it);
+            }
+            else {
+              gpuList.push_front(*it);
+            }
+            i++;
+          }
+          activeC.Assign(cpuList);
+          activeG.Assign(gpuList);
+          cpuList.clear(); gpuList.clear();
+#endif        
         }
 
         inactive.Clear();
@@ -183,7 +205,8 @@ public:
             if (activeC.Get(particlesC))
             {
                 std::list<Particle> I, T, A;
-                
+
+                workingOnC = particlesC.size();
                 COUNTER_INC("CPU", 1);
 
                 DataBlockIntegrator *blkC = filter->GetBlock(particlesC[0].blockIds[0]);
@@ -235,6 +258,7 @@ public:
             {
                 std::list<Particle> I, T, A;
                 
+                workingOnG = particlesG.size();
                 COUNTER_INC("GPU", 1);
 
                 DataBlockIntegrator *blkG = filter->GetBlock(m_Rank + 1000);
@@ -285,10 +309,20 @@ public:
             int numTerm = term.size() + numTermMessages;
 
             if (!in.empty()) {
-              if(useGPU) {
+              if(useGPU) { //maybe add special cases here later
                 activeG.Insert(in);
                 DBG("Adding to GPU"<<std::endl);
-              } else if (hybridGPU) {
+              } else if (hybridGPU) { 
+#ifdef ORACLE1      
+                if(workingOnG + activeG.Size() + in.size() > 100) { // if GPU still has lots to do, continue with GPU
+                  DBG("Adding to hybrid GPU"<<std::endl);
+                  activeG.Insert(in);
+                }
+                else { //GPU work is small, use CPU to finish up, maybe use workingOnC later
+                  DBG("Adding to hybrid CPU"<<std::endl);
+                  activeC.Insert(in);
+                }
+#elif ORACLE2
                 if (N < almostDone) { //if we aren't almost done, add to GPU
                   DBG("Adding to hybrid GPU"<<std::endl);
                   activeG.Insert(in);
@@ -297,10 +331,35 @@ public:
                   DBG("Adding to hybrid CPU"<<std::endl);
                   activeC.Insert(in);
                 }
-              } else {
-                DBG("Adding to CPU"<<std::endl);
+#else
+                //ORACLE3
                 activeC.Insert(in);
-              }
+#endif
+             } else {
+               DBG("Adding to CPU"<<std::endl);
+               activeC.Insert(in);
+             }
+             
+             /* todo: Implementation for Oracle3
+             else if (hybridGPU) {    
+               DBG("Adding to hybrid CPU"<<std::endl);
+               std::list<Particle> gpuList;
+               std::list<Particle> cpuList;
+               int i = 0;
+               for(auto it = in.cbegin(); it != in.cend(); it++) {
+                 if(i % 8 == 0) {
+                   cpuList.push_front(*it);
+                 }
+                 else {
+                   gpuList.push_front(*it);
+                 }
+                 i++;
+               }
+               activeC.Assign(cpuList);
+               activeG.Assign(gpuList);
+               cpuList.clear(); gpuList.clear();
+             } 
+             */
 
                DBG("ActivesC: "<<activeC<<std::endl<<"ActiveG: "<<activeG<<std::endl);
 
@@ -348,6 +407,7 @@ public:
     int numWorkerThreads;
     int sleepUS;
     int useGPU = 0, hybridGPU = 0;
+    int workingOnC = 0, workingOnG = 0;
 
     bool done, begin;
     vtkh::Mutex stateLock;
