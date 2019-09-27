@@ -63,7 +63,7 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
   vtkh::DataSet data_set;
   const int base_size = 32;
   const int blocks_per_rank = 1;
-  const int maxAdvSteps = 5000;
+  const int maxAdvSteps = 1000;
   const int num_blocks = comm_size * blocks_per_rank;
   
   std::string fieldName = "vector_data_Float64";

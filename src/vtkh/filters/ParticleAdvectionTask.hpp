@@ -15,7 +15,7 @@
 #define WDBG(msg)
 #endif
 
-#define ORACLE1
+#define ORACLE3
 
 namespace vtkh
 {
@@ -65,7 +65,7 @@ public:
         TotalNumParticles = N;
         sleepUS = _sleepUS;
         int everyN = N / 8;        
-
+          
         //initialize oracle
         if(N <= 1000) {
           activeC.Assign(particles); 
@@ -79,7 +79,7 @@ public:
         else { 
           hybridGPU = 1; //tell manage thread that this rank started in hybrid range
 #ifndef ORACLE3          
-          if (steps <= 250) { //initialize oracle1 or oracle2
+          if (steps < 250) { //initialize oracle1 or oracle2
             activeC.Assign(particles);
             DBG("Oracle went to hybrid range and started with CPU");
           } else {
@@ -105,7 +105,7 @@ public:
           cpuList.clear(); gpuList.clear();
 #endif        
         }
-
+        
         inactive.Clear();
         terminated.Clear();
     }
@@ -291,7 +291,7 @@ public:
     {
         DBG("manage_bm: "<<boundsMap<<std::endl);
         
-        int almostDone = (TotalNumParticles * .87);
+        int almostDone = (TotalNumParticles * .9);
         int N = 0;
 
         DBG("Begin TIA: "<<terminated<<" "<<inactive<<" "<<activeC<<" "<<activeG<<std::endl);
@@ -322,7 +322,8 @@ public:
                   DBG("Adding to hybrid CPU"<<std::endl);
                   activeC.Insert(in);
                 }
-#elif ORACLE2
+#else
+                #ifdef ORACLE2
                 if (N < almostDone) { //if we aren't almost done, add to GPU
                   DBG("Adding to hybrid GPU"<<std::endl);
                   activeG.Insert(in);
@@ -331,9 +332,10 @@ public:
                   DBG("Adding to hybrid CPU"<<std::endl);
                   activeC.Insert(in);
                 }
-#else
+                #else
                 //ORACLE3
                 activeC.Insert(in);
+                #endif
 #endif
              } else {
                DBG("Adding to CPU"<<std::endl);
