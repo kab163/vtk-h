@@ -16,6 +16,8 @@
 #include <iostream>
 #include <mpi.h>
 
+int init_seeds, init_steps;
+
 void checkValidity(vtkh::DataSet *data, const int maxSteps)
 {
   int numDomains = data->GetNumberOfDomains();
@@ -63,7 +65,7 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
   vtkh::DataSet data_set;
   const int base_size = 32;
   const int blocks_per_rank = 1;
-  const int maxAdvSteps = 1000;
+  const int maxAdvSteps = init_steps;
   const int num_blocks = comm_size * blocks_per_rank;
   
   std::string fieldName = "vector_data_Float64";
@@ -101,8 +103,8 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
   streamline.SetInput(&data_set);
   streamline.SetField(fieldName);
   streamline.SetMaxSteps(maxAdvSteps);
-  streamline.SetStepSize(0.001);
-  streamline.SetSeedsRandomWhole(1728);
+  streamline.SetStepSize(.001);
+  streamline.SetSeedsRandomWhole(init_seeds);
   streamline.SetUseThreadedVersion(true);
   streamline.SetDumpOutputFiles(false);
   streamline.SetGatherTraces(false);
@@ -115,3 +117,20 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
   MPI_Barrier(MPI_COMM_WORLD);
   MPI_Finalize();
 }
+
+int main(int argc, char* argv[])
+{
+    int result = 0;
+    ::testing::InitGoogleTest(&argc, argv);
+
+    // allow override of the data size via the command line
+    if(argc >= 2)
+    {
+      init_seeds = atoi(argv[1]);
+      init_steps = atoi(argv[2]);
+    }
+
+    result = RUN_ALL_TESTS();
+    return result;
+}
+

@@ -15,7 +15,7 @@
 #define WDBG(msg)
 #endif
 
-#define ORACLE3
+//#define ONLYGPU
 
 namespace vtkh
 {
@@ -63,53 +63,40 @@ public:
     {
         numWorkerThreads = 1;
         TotalNumParticles = N;
+        numSteps = steps;
         sleepUS = _sleepUS;
-        int everyN = N / 8;        
-          
-        //initialize oracle
-        if(N <= 1000) {
-          activeC.Assign(particles); 
-          DBG("Oracle started with CPU"<<std::endl);
-        } 
-        else if (N >= 4000) { //Note: this problem size with "tiny tiny" duration is a CPU win
+        
+        if (OracleDecidedToUseGPU(N)) {
           activeG.Assign(particles);
-          useGPU = 1; //tell manage thread that this rank started on GPU
-          DBG("Oracle started with GPU instead"<<std::endl);
+          DBG("Oracle started with GPU"<<std::endl);
         }
-        else { 
-          hybridGPU = 1; //tell manage thread that this rank started in hybrid range
-#ifndef ORACLE3          
-          if (steps < 250) { //initialize oracle1 or oracle2
-            activeC.Assign(particles);
-            DBG("Oracle went to hybrid range and started with CPU");
-          } else {
-            activeG.Assign(particles);
-            DBG("Oracle went to hybrid range and started with GPU");
-          }
-#else
-          //initialize oracle3
-          std::list<Particle> gpuList;
-          std::list<Particle> cpuList;
-          int i = 0;
-          for(auto it = particles.cbegin(); it != particles.cend(); it++) {
-            if(i % 10 == 0) {
-              cpuList.push_front(*it);
-            }
-            else {
-              gpuList.push_front(*it);
-            }
-            i++;
-          }
-          activeC.Assign(cpuList);
-          activeG.Assign(gpuList);
-          cpuList.clear(); gpuList.clear();
-#endif        
-        }
+        else {
+          activeC.Assign(particles); 
+          DBG("Oracle started with CPU instead"<<std::endl);
+        }  
         
         inactive.Clear();
         terminated.Clear();
     }
-    
+   
+    //Currently an "Oracle1" implementation
+    //todo: somehow use number of steps?
+    //slightly edited numbers..not sure how this will affect things...
+    int OracleDecidedToUseGPU(int n)
+    {
+      //run the oracle
+#ifdef ONLYGPU
+      return 1;
+#endif      
+
+      if(TotalNumParticles <= 1000)
+        return 0; //run on CPU
+      else if(n < 100) 
+        return 0; //run on CPU
+      else  
+        return 1; //true, run on GPU      
+    }
+ 
     bool CheckDone()
     {
         bool val;
@@ -309,63 +296,16 @@ public:
             int numTerm = term.size() + numTermMessages;
 
             if (!in.empty()) {
-              if(useGPU) { //maybe add special cases here later
+              if (OracleDecidedToUseGPU((workingOnG + activeG.Size() + in.size()))) {
                 activeG.Insert(in);
-                DBG("Adding to GPU"<<std::endl);
-              } else if (hybridGPU) { 
-#ifdef ORACLE1      
-                if(workingOnG + activeG.Size() + in.size() > 100) { // if GPU still has lots to do, continue with GPU
-                  DBG("Adding to hybrid GPU"<<std::endl);
-                  activeG.Insert(in);
-                }
-                else { //GPU work is small, use CPU to finish up, maybe use workingOnC later
-                  DBG("Adding to hybrid CPU"<<std::endl);
-                  activeC.Insert(in);
-                }
-#else
-                #ifdef ORACLE2
-                if (N < almostDone) { //if we aren't almost done, add to GPU
-                  DBG("Adding to hybrid GPU"<<std::endl);
-                  activeG.Insert(in);
-                }
-                else { //we're almost done so start up the CPU
-                  DBG("Adding to hybrid CPU"<<std::endl);
-                  activeC.Insert(in);
-                }
-                #else
-                //ORACLE3
+                DBG("Oracle continued with GPU within manage thread"<<std::endl);
+              } else {
                 activeC.Insert(in);
-                #endif
-#endif
-             } else {
-               DBG("Adding to CPU"<<std::endl);
-               activeC.Insert(in);
-             }
-             
-             /* todo: Implementation for Oracle3
-             else if (hybridGPU) {    
-               DBG("Adding to hybrid CPU"<<std::endl);
-               std::list<Particle> gpuList;
-               std::list<Particle> cpuList;
-               int i = 0;
-               for(auto it = in.cbegin(); it != in.cend(); it++) {
-                 if(i % 8 == 0) {
-                   cpuList.push_front(*it);
-                 }
-                 else {
-                   gpuList.push_front(*it);
-                 }
-                 i++;
-               }
-               activeC.Assign(cpuList);
-               activeG.Assign(gpuList);
-               cpuList.clear(); gpuList.clear();
-             } 
-             */
+                DBG("Oracle continued with CPU within manage thread instead"<<std::endl);
+              }
 
-               DBG("ActivesC: "<<activeC<<std::endl<<"ActiveG: "<<activeG<<std::endl);
-
-               /* At some point, I can Get a certain number of elements of the TSC to put into the active queues */ 
+              DBG("ActivesC: "<<activeC<<std::endl<<"ActiveG: "<<activeG<<std::endl);
+              /* At some point, I can Get a certain number of elements of the TSC to put into the active queues */ 
             }
             if (!term.empty())
                 terminated.Insert(term);
@@ -408,7 +348,8 @@ public:
 
     int numWorkerThreads;
     int sleepUS;
-    int useGPU = 0, hybridGPU = 0;
+    int numSteps = 0;
+    //int useGPU = 0, hybridGPU = 0;
     int workingOnC = 0, workingOnG = 0;
 
     bool done, begin;
