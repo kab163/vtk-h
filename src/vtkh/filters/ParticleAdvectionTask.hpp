@@ -15,7 +15,7 @@
 #define WDBG(msg)
 #endif
 
-//#define ONLYGPU
+#define ORACLE1
 
 namespace vtkh
 {
@@ -43,6 +43,16 @@ public:
             pa->GetInput()->GetDomain(i, ds, id);
             communicator.AddLocator(id, ds);
         }
+        
+        //Adding Events
+        stats.AddEvent("CPU_Advect");
+        stats.AddEvent("GPU_Advect");
+        stats.AddEvent("CPU_Sleep");
+        stats.AddEvent("GPU_Sleep");
+        //stats.AddEvent("Manage_Communicate");
+        //stats.AddEvent("Manage_Sleep");
+        stats.AddEvent("Oracle1_Decisions");
+        stats.AddEvent("Oracle2_Decisions");
 
         ADD_TIMER("CPUworker_sleep");
         ADD_TIMER("GPUworker_sleep");
@@ -65,7 +75,20 @@ public:
         TotalNumParticles = N;
         numSteps = steps;
         sleepUS = _sleepUS;
+        almostDone = (TotalNumParticles * .9);
         
+#ifdef ORACLE2
+        stats.Begin("Oracle2_Decisions");
+        if (N > 1000) {
+          activeG.Assign(particles);
+          DBG("Oracle started with GPU"<<std::endl);
+        } else {
+          activeC.Assign(particles); 
+          DBG("Oracle started with CPU instead"<<std::endl);
+        }
+        stats.End("Oracle2_Decisions");
+#else
+        stats.Begin("Oracle1_Decisions");
         if (OracleDecidedToUseGPU(N)) {
           activeG.Assign(particles);
           DBG("Oracle started with GPU"<<std::endl);
@@ -74,7 +97,8 @@ public:
           activeC.Assign(particles); 
           DBG("Oracle started with CPU instead"<<std::endl);
         }  
-        
+        stats.End("Oracle1_Decisions");
+#endif   
         inactive.Clear();
         terminated.Clear();
     }
@@ -86,13 +110,18 @@ public:
     {
       //run the oracle
 #ifdef ONLYGPU
-      return 1;
+      return 1; //true, run on GPU
 #endif      
 
       if(TotalNumParticles <= 1000)
         return 0; //run on CPU
+#ifdef ORACLE1
       else if(n < 100) 
         return 0; //run on CPU
+#else
+      else if(n > almostDone)
+        return 0; //run on CPU
+#endif
       else  
         return 1; //true, run on GPU      
     }
@@ -199,9 +228,11 @@ public:
                 DataBlockIntegrator *blkC = filter->GetBlock(particlesC[0].blockIds[0]);
 
                 WDBG("CPU WORKER: Integrate "<<particlesC<<" --> "<<std::endl);
+                stats.Begin("CPU_Advect");
                 TIMER_START("advectC");
                 int n = filter->InternalIntegrate<ResultT>(*blkC, particlesC, I, T, A, tracesC);
                 TIMER_STOP("advectC");
+                stats.End("CPU_Advect");
                 COUNTER_INC("advectStepsC", n);
                 WDBG("CPU TIA: "<<T<<" "<<I<<" "<<A<<std::endl<<std::endl);
 
@@ -211,9 +242,11 @@ public:
             }
             else
             {
+                stats.Begin("CPU_Sleep");
                 TIMER_START("CPUworker_sleep");
                 usleep(sleepUS);
                 TIMER_STOP("CPUworker_sleep");
+                stats.End("CPU_Sleep");
                 COUNTER_INC("CPUworker_naps", 1);
             }
         }
@@ -251,9 +284,11 @@ public:
                 DataBlockIntegrator *blkG = filter->GetBlock(m_Rank + 1000);
 
                 WDBG("GPU WORKER: Integrate "<<particlesG<<" --> "<<std::endl);
+                stats.Begin("GPU_Advect");
                 TIMER_START("advectG");
                 int n = filter->InternalIntegrate<ResultT>(*blkG, particlesG, I, T, A, tracesG);
                 TIMER_STOP("advectG");
+                stats.End("GPU_Advect"); 
                 COUNTER_INC("advectStepsG", n);
                 WDBG("GPU TIA: "<<T<<" "<<I<<" "<<A<<std::endl<<std::endl);
 
@@ -263,9 +298,11 @@ public:
             }
             else
             {
+                stats.Begin("GPU_Sleep");
                 TIMER_START("GPUworker_sleep");
                 usleep(sleepUS);
                 TIMER_STOP("GPUworker_sleep");
+                stats.End("GPU_Sleep"); 
                 COUNTER_INC("GPUworker_naps", 1);
             }
         }
@@ -278,7 +315,6 @@ public:
     {
         DBG("manage_bm: "<<boundsMap<<std::endl);
         
-        int almostDone = (TotalNumParticles * .9);
         int N = 0;
 
         DBG("Begin TIA: "<<terminated<<" "<<inactive<<" "<<activeC<<" "<<activeG<<std::endl);
@@ -292,14 +328,28 @@ public:
             worker_terminated.Get(term);
 
             int numTermMessages;
+            //stats.Begin("Manage_Communicate");
             communicator.Exchange(out, in, term, numTermMessages);
+            //stats.End("Manage_Communicate");
             int numTerm = term.size() + numTermMessages;
 
             if (!in.empty()) {
+#ifdef ORACLE1
               if (OracleDecidedToUseGPU((workingOnG + activeG.Size() + in.size()))) {
+                stats.Begin("Oracle1_Decisions");
                 activeG.Insert(in);
                 DBG("Oracle continued with GPU within manage thread"<<std::endl);
-              } else {
+                stats.End("Oracle1_Decisions");
+              }
+#else  //oracle2
+              if (OracleDecidedToUseGPU(N)) {
+                stats.Begin("Oracle2_Decisions");
+                activeG.Insert(in);
+                DBG("Oracle continued with GPU within manage thread"<<std::endl);
+                stats.End("Oracle2_Decisions");
+              }
+#endif
+              else {
                 activeC.Insert(in);
                 DBG("Oracle continued with CPU within manage thread instead"<<std::endl);
               }
@@ -318,9 +368,11 @@ public:
 
             if (activeC.Empty() && activeG.Empty())
             {//Could eventually put the advect particle code here
+                //stats.Begin("Manage_Sleep");
                 TIMER_START("sleep");
                 usleep(sleepUS);
                 TIMER_STOP("sleep");
+                //stats.End("Manage_Sleep");
                 COUNTER_INC("naps", 1);
                 communicator.CheckPendingSendRequests();
             }
@@ -351,6 +403,7 @@ public:
     int numSteps = 0;
     //int useGPU = 0, hybridGPU = 0;
     int workingOnC = 0, workingOnG = 0;
+    int almostDone;
 
     bool done, begin;
     vtkh::Mutex stateLock;

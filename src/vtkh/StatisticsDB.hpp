@@ -154,6 +154,12 @@ public:
         {
             return os<<"AVG: "<<s.mean<<" MED: "<<s.med<<" ("<<s.min<<","<<s.max<<":"<<s.std_dev<<")";
         }
+ 
+        //friend std::ostream & 
+        //operator<<(std::ostream &os, const EventHistory &e)
+       // {
+        //   return os<<"First: "<<e.history;
+        //}
     };
 
     StatisticsDB() : statsComputed(false)
@@ -241,9 +247,11 @@ public:
 
     //Output to file
     void DumpStats(const std::string &fname, const std::string &preamble="", bool append=false);
+    void DumpEvents(const std::string &fname);
 
     statValue<float> timerStat(const std::string &nm) {cs(); return timerStats[nm];}
     statValue<unsigned long> counterStat(const std::string &nm) {cs(); return counterStats[nm];}
+    //EventHistory eventStat(const std::string &nm) {cs(); return eventStats[nm];}
     unsigned long totalVal(const std::string &nm) {cs(); return counterStats[nm].sum;}
 
     void cs() {calcStats();}
@@ -431,10 +439,15 @@ extern vtkh::StatisticsDB stats;
 #define ADD_COUNTER(nm) stats.AddCounter(nm)
 #define COUNTER_INC(nm, val) stats.Increment(nm, val)
 
+//#define ADD_EVENT(nm) stats.AddEvent(nm)
+//#define EVENT_BEGIN(nm) stats.Begin(nm)
+//#define EVENT_END(nm) stats.End(nm)
+
 #define ADD_TIMER(nm) stats.AddTimer(nm)
 #define TIMER_START(nm) stats.Start(nm)
 #define TIMER_STOP(nm) stats.Stop(nm)
 #define DUMP_STATS(fname) stats.DumpStats(fname)
+#define DUMP_EVENTS(fname) stats.DumpEvents(fname)
 #else
 #define ADD_COUNTER(nm)
 #define COUNTER_INC(nm, val)

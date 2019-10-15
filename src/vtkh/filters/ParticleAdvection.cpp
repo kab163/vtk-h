@@ -220,6 +220,7 @@ void ParticleAdvection::TraceSeeds(std::vector<ResultT> &traces)
 
   TIMER_STOP("total");
   DUMP_STATS("particleAdvection.stats.txt");
+  DUMP_EVENTS("Events.txt");
 }
 
 void ParticleAdvection::DoExecute()

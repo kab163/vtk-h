@@ -43,6 +43,53 @@ StatisticsDB::DumpStats(const std::string &fname, const std::string &preamble, b
         for (auto &ci : stats.counters)
             outputStream<<ci.first<<" "<<stats.counterStat(ci.first)<<std::endl;
     }
+/*    if (!stats.events.empty())
+    {
+        outputStream<<std::endl;
+        outputStream<<"EVENT_STATS:"<<std::endl;
+        for (auto &ei : stats.events)
+            outputStream<<ei.first<<" "<<stats.eventStat(ei.first)<<std::endl;
+    }*/
+}
+
+void StatisticsDB::DumpEvents(const std::string &eventFileName)
+{
+    
+#ifdef VTKH_PARALLEL
+    int nRanks = vtkh::GetMPISize();
+    int rank = vtkh::GetMPIRank();
+    if (rank != 0)
+        return;
+#else
+    int nRanks = 1;
+    int rank = 0;
+#endif
+
+    std::ofstream outE;
+    outE.open(eventFileName);    
+
+    double diff = 0;
+    int loopCount = 0;
+    for (int i = 0; i < nRanks; i++)
+    {
+        loopCount = 0;
+        for (auto it = stats.eventStats[i].begin(); it != stats.eventStats[i].end(); it++)
+        {
+            for (auto h = stats.eventStats[i][it->first].history.begin();
+                 h != stats.eventStats[i][it->first].history.end(); h++)
+            {
+                diff = h->second - h->first;
+		if(diff < 0.000005 && it->first == "communication") ;
+                else   
+		{
+		    if(diff < 0.00000 && it->first == "integration") h->second = h->first + 0.00005;
+	            
+                    outE<<i<<","<<it->first<<"_"<<i<<","<<h->first<<","<<h->second<<","<<it->first<<std::endl;
+                }
+                loopCount++;
+            }
+        }
+    }
 }
 
 };
