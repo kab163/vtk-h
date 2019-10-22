@@ -49,10 +49,6 @@ public:
         stats.AddEvent("GPU_Advect");
         stats.AddEvent("CPU_Sleep");
         stats.AddEvent("GPU_Sleep");
-        //stats.AddEvent("Manage_Communicate");
-        //stats.AddEvent("Manage_Sleep");
-        stats.AddEvent("Oracle1_Decisions");
-        stats.AddEvent("Oracle2_Decisions");
 
         ADD_TIMER("CPUworker_sleep");
         ADD_TIMER("GPUworker_sleep");
@@ -78,7 +74,6 @@ public:
         almostDone = (TotalNumParticles * .9);
         
 #ifdef ORACLE2
-        stats.Begin("Oracle2_Decisions");
         if (N > 1000) {
           activeG.Assign(particles);
           DBG("Oracle started with GPU"<<std::endl);
@@ -86,9 +81,7 @@ public:
           activeC.Assign(particles); 
           DBG("Oracle started with CPU instead"<<std::endl);
         }
-        stats.End("Oracle2_Decisions");
 #else
-        stats.Begin("Oracle1_Decisions");
         if (OracleDecidedToUseGPU(N)) {
           activeG.Assign(particles);
           DBG("Oracle started with GPU"<<std::endl);
@@ -97,7 +90,6 @@ public:
           activeC.Assign(particles); 
           DBG("Oracle started with CPU instead"<<std::endl);
         }  
-        stats.End("Oracle1_Decisions");
 #endif   
         inactive.Clear();
         terminated.Clear();
@@ -110,8 +102,12 @@ public:
     {
       //run the oracle
 #ifdef ONLYGPU
-      return 1; //true, run on GPU
-#endif      
+      return 1; //run on GPU only
+#endif     
+
+#ifdef CPU
+      return 0; //run on CPU only
+#endif 
 
       if(TotalNumParticles <= 1000)
         return 0; //run on CPU
@@ -328,25 +324,19 @@ public:
             worker_terminated.Get(term);
 
             int numTermMessages;
-            //stats.Begin("Manage_Communicate");
             communicator.Exchange(out, in, term, numTermMessages);
-            //stats.End("Manage_Communicate");
             int numTerm = term.size() + numTermMessages;
 
             if (!in.empty()) {
 #ifdef ORACLE1
               if (OracleDecidedToUseGPU((workingOnG + activeG.Size() + in.size()))) {
-                stats.Begin("Oracle1_Decisions");
                 activeG.Insert(in);
                 DBG("Oracle continued with GPU within manage thread"<<std::endl);
-                stats.End("Oracle1_Decisions");
               }
 #else  //oracle2
               if (OracleDecidedToUseGPU(N)) {
-                stats.Begin("Oracle2_Decisions");
                 activeG.Insert(in);
                 DBG("Oracle continued with GPU within manage thread"<<std::endl);
-                stats.End("Oracle2_Decisions");
               }
 #endif
               else {
@@ -368,11 +358,9 @@ public:
 
             if (activeC.Empty() && activeG.Empty())
             {//Could eventually put the advect particle code here
-                //stats.Begin("Manage_Sleep");
                 TIMER_START("sleep");
                 usleep(sleepUS);
                 TIMER_STOP("sleep");
-                //stats.End("Manage_Sleep");
                 COUNTER_INC("naps", 1);
                 communicator.CheckPendingSendRequests();
             }
