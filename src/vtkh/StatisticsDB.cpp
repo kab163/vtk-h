@@ -3,12 +3,12 @@
 
 namespace vtkh
 {
-StatisticsDB stats;
+StatisticsDB statsDB;
 
 void
 StatisticsDB::DumpStats(const std::string &fname, const std::string &preamble, bool append)
 {
-    stats.calcStats();
+    statsDB.calcStats();
 
 #ifdef VTKH_PARALLEL
     int rank = vtkh::GetMPIRank();
@@ -22,26 +22,26 @@ StatisticsDB::DumpStats(const std::string &fname, const std::string &preamble, b
     if (!preamble.empty())
         outputStream<<preamble;
 
-    if (!stats.timers.empty())
+    if (!statsDB.timers.empty())
     {
         outputStream<<"TIMERS:"<<std::endl;
-        for (auto &ti : stats.timers)
+        for (auto &ti : statsDB.timers)
             outputStream<<ti.first<<": "<<ti.second.GetTime()<<std::endl;
         outputStream<<std::endl;
         outputStream<<"TIMER_STATS"<<std::endl;
-        for (auto &ti : stats.timers)
-            outputStream<<ti.first<<" "<<stats.timerStat(ti.first)<<std::endl;
+        for (auto &ti : statsDB.timers)
+            outputStream<<ti.first<<" "<<statsDB.timerStat(ti.first)<<std::endl;
     }
-    if (!stats.counters.empty())
+    if (!statsDB.counters.empty())
     {
         outputStream<<std::endl;
         outputStream<<"COUNTERS:"<<std::endl;
-        for (auto &ci : stats.counters)
-            outputStream<<ci.first<<" "<<stats.totalVal(ci.first)<<std::endl;
+        for (auto &ci : statsDB.counters)
+            outputStream<<ci.first<<" "<<statsDB.totalVal(ci.first)<<std::endl;
         outputStream<<std::endl;
         outputStream<<"COUNTER_STATS"<<std::endl;
-        for (auto &ci : stats.counters)
-            outputStream<<ci.first<<" "<<stats.counterStat(ci.first)<<std::endl;
+        for (auto &ci : statsDB.counters)
+            outputStream<<ci.first<<" "<<statsDB.counterStat(ci.first)<<std::endl;
     }
 }
 

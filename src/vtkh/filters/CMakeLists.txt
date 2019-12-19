@@ -9,10 +9,10 @@ set(vtkh_filters_headers
   Clip.hpp
   ClipField.hpp
   Gradient.hpp
-  GhostStripper.hpp
-  HistSampling.hpp
-  Histogram.hpp
-  Log.hpp
+#  GhostStripper.hpp
+#  HistSampling.hpp
+#  Histogram.hpp
+#  Log.hpp
   IsoVolume.hpp
   NoOp.hpp
   Lagrangian.hpp
@@ -23,7 +23,7 @@ set(vtkh_filters_headers
   PointAverage.hpp
   Recenter.hpp
   Threshold.hpp
-  Statistics.hpp
+#  Statistics.hpp
   Slice.hpp
   VectorMagnitude.hpp
   communication/BoundsMap.hpp
@@ -44,10 +44,11 @@ set(vtkh_filters_sources
   Clip.cpp
   ClipField.cpp
   Gradient.cpp
-  GhostStripper.cpp
-  HistSampling.cpp
-  Histogram.cpp
-  Log.cpp
+#  GhostStripper.cpp
+#  HistSampling.cpp
+#  Histogram.cpp
+#  Log.cpp
+  Integrator.cpp
   IsoVolume.cpp
   NoOp.cpp
   Lagrangian.cpp
@@ -57,7 +58,7 @@ set(vtkh_filters_sources
   Recenter.cpp
   Threshold.cpp
   Slice.cpp
-  Statistics.cpp
+#  Statistics.cpp
   VectorMagnitude.cpp
   communication/MemStream.cpp
   )
@@ -94,6 +95,9 @@ if (ENABLE_SERIAL)
 
     if(ENABLE_LOGGING)
       target_compile_definitions(vtkh_filters PRIVATE VTKH_ENABLE_LOGGING)
+    endif()
+    if(ENABLE_STATISTICS)
+      target_compile_definitions(vtkh_filters PRIVATE VTKH_ENABLE_STATISTICS)
     endif()
 
     if(ENABLE_CUDA)
@@ -156,6 +160,9 @@ if (MPI_FOUND)
 
     if(ENABLE_LOGGING)
       target_compile_definitions(vtkh_filters_mpi PRIVATE VTKH_ENABLE_LOGGING)
+    endif()
+    if(ENABLE_STATISTICS)
+      target_compile_definitions(vtkh_filters_mpi PRIVATE VTKH_ENABLE_STATISTICS)
     endif()
 
     vtkm_add_target_information(vtkh_filters_mpi DEVICE_SOURCES ${vtkh_filter_sources})

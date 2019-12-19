@@ -1,6 +1,7 @@
 #include "vtkh.hpp"
 #include "Error.hpp"
 #include <vtkh/Logger.hpp>
+#include <vtkh/StatisticsDB.hpp>
 
 #include <vtkm/cont/RuntimeDeviceInformation.h>
 #include <vtkm/cont/RuntimeDeviceTracker.h>

@@ -28,7 +28,8 @@ public:
         communicator(comm, bmap),
         boundsMap(bmap),
         filter(pa),
-        sleepUS(100)
+        sleepUS(100),
+        batchSize(-1)
     {
         m_Rank = vtkh::GetMPIRank();
         m_NumRanks = vtkh::GetMPISize();
@@ -40,14 +41,53 @@ public:
     {
     }
 
-    void Init(const std::vector<Particle> &particles, int N, int _sleepUS)
+    void Init(const std::vector<Particle> &particles, int N, int _sleepUS, int _batchSize)
     {
         numWorkerThreads = 1;
         TotalNumParticles = N;
         sleepUS = _sleepUS;
+        batchSize = _batchSize;
         active.Assign(particles);
         inactive.Clear();
         terminated.Clear();
+    }
+
+    bool GetActiveParticles(std::vector<Particle> &particles)
+    {
+        std::vector<Particle> ps;
+
+        active.Get(ps);
+        if (ps.empty())
+            return false;
+
+        std::map<int,int> domCount;
+        for (auto &p : ps)
+            domCount[p.blockIds[0]]++;
+
+        if (domCount.size() == 1)
+        {
+            particles = ps;
+            return true;
+        }
+
+        int maxDom = -1, maxVal = -1;
+        for (auto &i : domCount)
+            if (i.second > maxVal)
+            {
+                maxDom = i.first;
+                maxVal = i.second;
+            }
+
+        std::vector<Particle> otherP;
+        for (auto &p : ps)
+            if (p.blockIds[0] == maxDom)
+                particles.push_back(p);
+            else
+                otherP.push_back(p);
+
+        active.Insert(otherP);
+
+        return true;
     }
 
     bool CheckDone()
@@ -124,7 +164,7 @@ public:
         while (!CheckDone())
         {
             std::vector<Particle> particles;
-            if (active.Get(particles))
+            if (GetActiveParticles(particles))
             {
                 std::vector<Particle> I, T, A;
 
@@ -132,7 +172,12 @@ public:
 
                 TIMER_START("advect");
                 WDBG("WORKER: Integrate "<<particles<<" --> "<<std::endl);
-                int n = filter->InternalIntegrate<ResultT>(*blk, particles, I, T, A, traces);
+                int n;
+                if (batchSize == -1)
+                    n = filter->InternalIntegrate<ResultT>(*blk, particles, I, T, A, traces);
+                else
+                    n = filter->InternalIntegrate<ResultT>(*blk, particles, I, T, A, traces, worker_inactive);
+
                 TIMER_STOP("advect");
                 COUNTER_INC("advectSteps", n);
                 WDBG("TIA: "<<T<<" "<<I<<" "<<A<<std::endl<<std::endl);
@@ -216,6 +261,7 @@ public:
 
     int numWorkerThreads;
     int sleepUS;
+    int batchSize;
 
     bool done, begin;
     vtkh::Mutex stateLock;

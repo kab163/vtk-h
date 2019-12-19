@@ -63,6 +63,9 @@ if (ENABLE_SERIAL)
     if(ENABLE_LOGGING)
       target_compile_definitions(vtkh_rendering PRIVATE VTKH_ENABLE_LOGGING)
     endif()
+    if(ENABLE_STATISTICS)
+      target_compile_definitions(vtkh_rendering PRIVATE VTKH_ENABLE_STATISTICS)
+    endif()
 
     vtkm_add_target_information(vtkh_rendering DEVICE_SOURCES ${vtkh_rendering_sources})
 
@@ -133,6 +136,9 @@ if (MPI_FOUND)
 
     if(ENABLE_LOGGING)
       target_compile_definitions(vtkh_rendering_mpi PRIVATE VTKH_ENABLE_LOGGING)
+    endif()
+    if(ENABLE_STATISTICS)
+      target_compile_definitions(vtkh_rendering_mpi PRIVATE VTKH_ENABLE_STATISTICS)
     endif()
 
 

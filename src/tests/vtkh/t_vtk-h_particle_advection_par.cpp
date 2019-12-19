@@ -10,11 +10,16 @@
 #include <vtkh/DataSet.hpp>
 #include <vtkh/filters/ParticleAdvection.hpp>
 #include <vtkm/io/writer/VTKDataSetWriter.h>
+#include <vtkm/io/reader/VTKDataSetReader.h>
 #include <vtkm/cont/DataSet.h>
 #include <vtkm/cont/DataSetFieldAdd.h>
 #include "t_test_utils.hpp"
 #include <iostream>
 #include <mpi.h>
+#include <sstream>
+
+
+std::map<std::string, std::string> args;
 
 void checkValidity(vtkh::DataSet *data, const int maxSteps)
 {
@@ -48,41 +53,176 @@ void writeDataSet(vtkh::DataSet *data, std::string fName, int rank)
   }
 }
 
+void LoadData(const std::string &fname, vtkh::DataSet &dataSet)
+{
+  int rank, nRanks;
+  MPI_Comm_size(MPI_COMM_WORLD, &nRanks);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  if (fname == "")
+  {
+      const int base_size = 32;
+      const int blocks_per_rank = 1;
+      const int num_blocks = nRanks * blocks_per_rank;
+      for(int i = 0; i < blocks_per_rank; ++i)
+      {
+          int domain_id = rank * blocks_per_rank + i;
+          dataSet.AddDomain(CreateTestDataRectilinear(domain_id, num_blocks, base_size), domain_id);
+      }
+  }
+  else
+  {
+      std::string buff;
+      std::ifstream is;
+      is.open(args["--filename"]);
+      if (!is) throw "unknown file";
+
+      auto p0 = fname.rfind(".visit");
+      if (p0 == std::string::npos)
+          throw "Only .visit files are supported.";
+      auto tmp = fname.substr(0, p0);
+      auto p1 = tmp.rfind("/");
+      auto dir = tmp.substr(0, p1);
+
+      std::getline(is, buff);
+      auto numBlocks = std::stoi(buff.substr(buff.find("!NBLOCKS ")+9, buff.size()));
+      if (rank == 0) std::cout<<"numBlocks= "<<numBlocks<<std::endl;
+
+      int nPer = numBlocks / nRanks;
+      int b0 = rank*nPer, b1 = (rank+1)*nPer;
+      if (rank == (nRanks-1))
+          b1 = numBlocks;
+
+      for (int i = 0; i < numBlocks; i++)
+      {
+          std::getline(is, buff);
+          if (i >= b0 && i < b1)
+          {
+              vtkm::cont::DataSet ds;
+              std::string vtkFile = dir + "/" + buff;
+              vtkm::io::reader::VTKDataSetReader reader(vtkFile);
+              if (rank == 0) std::cout<<i<<" : "<<vtkFile<<std::endl;
+              ds = reader.ReadDataSet();
+              int np = ds.GetNumberOfPoints();
+
+              /*
+              auto field = ds.GetField("grad").GetData();
+              vtkm::cont::ArrayHandle<vtkm::Vec3f> vecField;
+              field.CopyTo(vecField);
+              auto portal = vecField.GetPortalControl();
+              for (int j = 0; j < np; j++)
+                  portal.Set(j, vtkm::Vec3f(1,0,0));
+              */
+
+              dataSet.AddDomain(ds, i);
+          }
+      }
+  }
+}
+
 //----------------------------------------------------------------------------
 TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
 {
   MPI_Init(NULL, NULL);
-  int comm_size, rank;
-  MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+  int rank, nRanks;
+  MPI_Comm_size(MPI_COMM_WORLD, &nRanks);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   vtkh::SetMPICommHandle(MPI_Comm_c2f(MPI_COMM_WORLD));
 
-  std::cout << "Running parallel Particle Advection, vtkh - with " << comm_size << " ranks" << std::endl;
+  std::cout << "Running parallel Particle Advection, vtkh - with " << nRanks << " ranks" << std::endl;
 
-  vtkh::DataSet data_set;
-  const int base_size = 32;
-  const int blocks_per_rank = 1;
-  const int maxAdvSteps = 100;
-  const int num_blocks = comm_size * blocks_per_rank;
+  vtkh::DataSet dataSet;
 
-  for(int i = 0; i < blocks_per_rank; ++i)
-  {
-    int domain_id = rank * blocks_per_rank + i;
-    data_set.AddDomain(CreateTestDataRectilinear(domain_id, num_blocks, base_size), domain_id);
-  }
+  LoadData(args["--filename"], dataSet);
 
   vtkh::ParticleAdvection streamline;
-  streamline.SetInput(&data_set);
-  streamline.SetField("vector_data_Float64");
-  streamline.SetMaxSteps(maxAdvSteps);
-  streamline.SetStepSize(0.1);
-  streamline.SetSeedsRandomWhole(500);
+  streamline.SetGatherTraces((std::stoi(args["--streamline"]) == 1));
+  streamline.SetDumpOutputFiles((std::stoi(args["--dump"]) == 1));
+  streamline.SetInput(&dataSet);
+  streamline.SetField(args["--field"]);
+
+  streamline.SetMaxSteps(std::stoi(args["--maxSteps"]));
+  streamline.SetStepSize(std::stof(args["--stepSize"]));
+  streamline.SetSeedsRandomWhole(std::stoi(args["--numSeeds"]));
+  streamline.SetUseThreadedVersion(std::stoi(args["--threaded"]));
+  if (args["--box"] != "")
+  {
+      std::string s, str = args["--box"];
+      std::istringstream f(str);
+      std::vector<double> vals;
+      while (std::getline(f, s, ' '))
+      {
+          vals.push_back(std::stof(s));
+      }
+      vtkm::Bounds box(vals[0], vals[1], vals[2], vals[3], vals[4], vals[5]);
+      streamline.SetSeedsRandomBox(std::stoi(args["--numSeeds"]), box);
+  }
+  if (args["--statsfile"] != "")
+      streamline.SetStatsFile(args["--statsfile"]);
+
+  //streamline.SetSeedPoint(vtkm::Vec3f(1,1,1));
+  streamline.SetBatchSize(std::stoi(args["--batchSize"]));
+
   streamline.Update();
   vtkh::DataSet *streamline_output = streamline.GetOutput();
 
-  checkValidity(streamline_output, maxAdvSteps);
-  writeDataSet(streamline_output, "advection_SeedsRandomWhole", rank);
+  //checkValidity(streamline_output, maxAdvSteps);
+  //writeDataSet(streamline_output, "advection_SeedsRandomWhole", rank);
 
   MPI_Barrier(MPI_COMM_WORLD);
   MPI_Finalize();
+}
+
+
+int main(int argc, char* argv[])
+{
+    args["--filename"] = "";
+    args["--field"] = "";
+    args["--numSeeds"] = "100";
+    args["--stepSize"] = "0.01";
+    args["--maxSteps"] = "100";
+    args["--batchSize"] = "-1";
+    args["--streamline"] = "0";
+    args["--dump"] = "0";
+    args["--box"] = "";
+    args["--threaded"] = "0";
+    args["--statsfile"] = "";
+
+    int i = 1;
+    while (i < argc)
+    {
+        int inc = 1;
+        std::string a0 = argv[i];
+        std::string a1 = "1";
+        if (i < argc-1)
+        {
+            std::string tmp(argv[i+1]);
+            if (a0 == "--box")
+            {
+                a1 = "";
+                for (int c = 0; c < 6; c++)
+                    a1 = a1 + std::string(argv[i+1+c]) + " ";
+                inc = 6;
+                std::cout<<"box: "<<a1<<std::endl;
+            }
+            else if (tmp.find("--") == std::string::npos)
+            {
+                a1 = tmp;
+                inc = 2;
+            }
+
+        }
+        i+= inc;
+        args[a0] = a1;
+    }
+
+    for (auto m : args)
+        std::cout<<"("<<m.first<<" "<<m.second<<")"<<std::endl;
+
+    int result = 0;
+    ::testing::InitGoogleTest(&argc, argv);
+//    MPI_Init(&argc, &argv);
+    result = RUN_ALL_TESTS();
+//    MPI_Finalize();
+    return result;
 }
