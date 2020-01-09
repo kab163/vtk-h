@@ -21,7 +21,7 @@
 #include <vtkh/filters/ParticleAdvectionTask.hpp>
 #endif
 
-#ifdef ENABLE_LOGGING
+#ifdef VTKH_ENABLE_DEBUG_LOGGING
 #define DBG(msg) vtkh::Logger::GetInstance("out")->GetStream()<<msg
 #define WDBG(msg) vtkh::Logger::GetInstance("wout")->GetStream()<<msg
 #else
@@ -111,9 +111,9 @@ template<>
 int
 ParticleAdvection::InternalIntegrate<vtkm::worklet::ParticleAdvectionResult>(DataBlockIntegrator &blk,
                                      std::vector<Particle> &v,
-                                     std::list<Particle> &I,
-                                     std::list<Particle> &T,
-                                     std::list<Particle> &A,
+                                     std::vector<Particle> &I,
+                                     std::vector<Particle> &T,
+                                     std::vector<Particle> &A,
                                      std::vector<vtkm::worklet::ParticleAdvectionResult> &traces
                                      )
 {
@@ -124,9 +124,9 @@ template<>
 int
 ParticleAdvection::InternalIntegrate<vtkm::worklet::StreamlineResult>(DataBlockIntegrator &blk,
                                      std::vector<Particle> &v,
-                                     std::list<Particle> &I,
-                                     std::list<Particle> &T,
-                                     std::list<Particle> &A,
+                                     std::vector<Particle> &I,
+                                     std::vector<Particle> &T,
+                                     std::vector<Particle> &A,
                                      std::vector<vtkm::worklet::StreamlineResult> &traces
                                      )
 {
@@ -142,21 +142,11 @@ void ParticleAdvection::TraceSingleThread(std::vector<ResultT> &traces)
   ParticleMessenger communicator(mpiComm, boundsMap);
   communicator.RegisterMessages(2, std::min(64, numRanks-1), 128, std::min(64, numRanks-1));
 
-  const int nDoms = this->m_input->GetNumberOfDomains();
-  for (int i = 0; i < nDoms; i++)
-  {
-    vtkm::Id id;
-    vtkm::cont::DataSet ds;
-    this->m_input->GetDomain(i, ds, id);
-    communicator.AddLocator(id, ds);
-  }
-
   int N = 0;
   while (true)
   {
       DBG("MANAGE: termCount= "<<terminated.size()<<std::endl<<std::endl);
-      std::vector<Particle> v;
-      std::list<Particle> I, T, A;
+      std::vector<Particle> v, I, T, A;
 
       if (GetActiveParticles(v))
       {
@@ -176,7 +166,7 @@ void ParticleAdvection::TraceSingleThread(std::vector<ResultT> &traces)
               active.insert(active.end(), A.begin(), A.end());
       }
 
-      std::list<Particle> in;
+      std::vector<Particle> in;
       int numTermMessages;
       communicator.Exchange(I, in, T, numTermMessages);
       int numTerm = T.size() + numTermMessages;
@@ -228,8 +218,6 @@ void ParticleAdvection::DoExecute()
 {
   this->Init();
   this->CreateSeeds();
-  if (this->dumpOutputFiles)
-    this->DumpDS(0);
 
   if(!gatherTraces)
   {
@@ -310,15 +298,16 @@ void ParticleAdvection::DoExecute()
 
         //Create a single polyLines cell set.
         vtkm::cont::CellSetExplicit<> polyLines;
-        polyLines.Fill(positions.GetNumberOfValues(), cellTypes, cellCounts, connectivity);
+        auto new_offsets = vtkm::cont::ConvertNumIndicesToOffsets(cellCounts);
+        polyLines.Fill(positions.GetNumberOfValues(), cellTypes, connectivity, new_offsets);
 
         vtkm::cont::DataSet ds;
         vtkm::cont::CoordinateSystem outputCoords("coordinates", positions);
         ds.AddCoordinateSystem(outputCoords);
-        ds.AddCellSet(polyLines);
+        ds.SetCellSet(polyLines);
         this->m_output->AddDomain(ds, rank);
         if (this->dumpOutputFiles)
-            this->DumpSLOutput(&ds, rank, 0);
+            this->DumpTraces(positions);
     }
     else
     {
@@ -338,7 +327,7 @@ ParticleAdvection::GetActiveParticles(std::vector<Particle> &v)
 
     int workingBlockID = active.front().blockIds[0];
 
-    std::list<Particle>::iterator listIt = active.begin();
+    std::vector<Particle>::iterator listIt = active.begin();
     while (listIt != active.end())
     {
       Particle p = *listIt;
@@ -348,9 +337,7 @@ ParticleAdvection::GetActiveParticles(std::vector<Particle> &v)
         listIt = active.erase(listIt);
       }
       else
-      {
         listIt++;
-      }
     }
     return !v.empty();
 }
@@ -427,7 +414,7 @@ ParticleAdvection::DumpDS(int ts)
     this->m_input->GetDomain(i, dom, domId);
 
     char nm[128];
-    sprintf(nm, "dom.ts%03i.block%03d.vtk", ts, domId);
+    sprintf(nm, "dom.ts%03d.block%03d.vtk", ts, (int)domId);
 
     vtkm::io::writer::VTKDataSetWriter writer(nm);
     writer.WriteDataSet(dom);
@@ -442,7 +429,7 @@ ParticleAdvection::DumpDS(int ts)
     for (int i = 0; i < totalNumDoms; i++)
     {
       char nm[128];
-      sprintf(nm, "dom.ts%03i.block%03d.vtk", ts, i);
+      sprintf(nm, "dom.ts%03d.block%03d.vtk", ts, i);
       output<<nm<<std::endl;
     }
   }
@@ -480,7 +467,7 @@ ParticleAdvection::BoxOfSeeds(const vtkm::Bounds &box,
   float boxRange[6] = {(float)box.X.Min, (float)box.X.Max,
                        (float)box.Y.Min, (float)box.Y.Max,
                        (float)box.Z.Min, (float)box.Z.Max};
-  DBG("Box of Seeds: N= "<<numSeeds<<" "<<box<<std::endl);
+  //DBG("Box of Seeds: N= "<<numSeeds<<" "<<box<<std::endl);
   //shrink by 5%
   if (shrink)
   {
@@ -587,6 +574,35 @@ ParticleAdvection::DumpTraces(int ts, const std::vector<vtkm::Vec<double,4>> &pa
         {
             char nm[128];
             sprintf(nm, "output.ts%03i.block%03d.txt", ts, i);
+            output<<nm<<std::endl;
+        }
+    }
+}
+
+void
+ParticleAdvection::DumpTraces(const vtkm::cont::ArrayHandle<vtkm::Vec3f> &pts)
+{
+    std::ofstream output;
+    char nm[128];
+    sprintf(nm, "output.%03d.txt", rank);
+    output.open(nm, std::ofstream::out);
+
+    output<<"X,Y,Z,ID"<<std::endl;
+    auto portal = pts.GetPortalConstControl();
+    int nPts = pts.GetNumberOfValues();
+
+    for (int i = 0; i < nPts; i++)
+        output<<portal.Get(i)[0]<<", "<<portal.Get(i)[1]<<", "<<portal.Get(i)[2]<<", "<<i<<std::endl;
+
+    if (rank == 0)
+    {
+        std::ofstream output;
+        output.open("output.visit", std::ofstream::out);
+        output<<"!NBLOCKS "<<numRanks<<std::endl;
+        for (int i = 0; i < numRanks; i++)
+        {
+            char nm[128];
+            sprintf(nm, "output.%03d.txt", i);
             output<<nm<<std::endl;
         }
     }
