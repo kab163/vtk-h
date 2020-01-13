@@ -6,6 +6,7 @@
 #include <vtkh/utils/ThreadSafeContainer.hpp>
 #include <vtkh/filters/ParticleAdvection.hpp>
 #include <vtkh/filters/communication/BoundsMap.hpp>
+//#include <vtkm/cont/openmp/DeviceAdapterOpenMP.h>
 
 #ifdef ENABLE_LOGGING
 #define DBG(msg) vtkh::Logger::GetInstance("out")->GetStream()<<msg
@@ -15,7 +16,10 @@
 #define WDBG(msg)
 #endif
 
-#define ORACLE1
+#define THRESHOLD 100
+#define FACTOR .95
+
+#define CPUONLY
 
 namespace vtkh
 {
@@ -71,18 +75,9 @@ public:
         TotalNumParticles = N;
         numSteps = steps;
         sleepUS = _sleepUS;
-        almostDone = (TotalNumParticles * .9);
+        almostDone = 60000; //(N * .95);
         
-#ifdef ORACLE2
-        if (N > 1000) {
-          activeG.Assign(particles);
-          DBG("Oracle started with GPU"<<std::endl);
-        } else {
-          activeC.Assign(particles); 
-          DBG("Oracle started with CPU instead"<<std::endl);
-        }
-#else
-        if (OracleDecidedToUseGPU(N)) {
+        if (OracleDecidedToUseGPU((N/m_NumRanks))) {
           activeG.Assign(particles);
           DBG("Oracle started with GPU"<<std::endl);
         }
@@ -90,36 +85,29 @@ public:
           activeC.Assign(particles); 
           DBG("Oracle started with CPU instead"<<std::endl);
         }  
-#endif   
+        
         inactive.Clear();
         terminated.Clear();
     }
    
-    //Currently an "Oracle1" implementation
-    //todo: somehow use number of steps?
-    //slightly edited numbers..not sure how this will affect things...
     int OracleDecidedToUseGPU(int n)
     {
-      //run the oracle
 #ifdef ONLYGPU
       return 1; //run on GPU only
 #endif     
 
-#ifdef CPU
+#ifdef CPUONLY
       return 0; //run on CPU only
 #endif 
 
-      if(TotalNumParticles <= 1000)
-        return 0; //run on CPU
 #ifdef ORACLE1
-      else if(n < 100) 
+      if(n <= (THRESHOLD)) 
         return 0; //run on CPU
-#else
-      else if(n > almostDone)
-        return 0; //run on CPU
+      else
+        return 1; //run on GPU
 #endif
-      else  
-        return 1; //true, run on GPU      
+
+      return 0; //shouldn't get to this point...
     }
  
     bool CheckDone()
@@ -200,14 +188,14 @@ public:
       vtkm::cont::RuntimeDeviceTracker &device_tracker
                                        = vtkm::cont::GetRuntimeDeviceTracker();
 
-      if(device_tracker.CanRunOn(vtkm::cont::DeviceAdapterTagSerial())) {
-        device_tracker.ForceDevice(vtkm::cont::DeviceAdapterTagSerial());
-	WDBG("CPU thread forcing vtkm to run with Device Adapter Tag Serial"<<std::endl);
+      if(device_tracker.CanRunOn(vtkm::cont::DeviceAdapterTagOpenMP())) {
+        device_tracker.ForceDevice(vtkm::cont::DeviceAdapterTagOpenMP());
+	WDBG("CPU thread forcing vtkm to run with Device Adapter Tag OpenMP"<<std::endl);
       }
       else
       {
         std::stringstream msg;
-        msg << "CPU thread Failed to set up Device Tag Serial " << std::endl;
+        msg << "CPU thread Failed to set up Device Tag OpenMP " << std::endl;
         throw Error(msg.str());
       }
 
@@ -328,17 +316,10 @@ public:
             int numTerm = term.size() + numTermMessages;
 
             if (!in.empty()) {
-#ifdef ORACLE1
               if (OracleDecidedToUseGPU((workingOnG + activeG.Size() + in.size()))) {
                 activeG.Insert(in);
                 DBG("Oracle continued with GPU within manage thread"<<std::endl);
               }
-#else  //oracle2
-              if (OracleDecidedToUseGPU(N)) {
-                activeG.Insert(in);
-                DBG("Oracle continued with GPU within manage thread"<<std::endl);
-              }
-#endif
               else {
                 activeC.Insert(in);
                 DBG("Oracle continued with CPU within manage thread instead"<<std::endl);
@@ -389,9 +370,8 @@ public:
     int numWorkerThreads;
     int sleepUS;
     int numSteps = 0;
-    //int useGPU = 0, hybridGPU = 0;
     int workingOnC = 0, workingOnG = 0;
-    int almostDone;
+    int almostDone = 0;
 
     bool done, begin;
     vtkh::Mutex stateLock;
