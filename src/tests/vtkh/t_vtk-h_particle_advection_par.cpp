@@ -82,10 +82,10 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
     if (comm_size == 2)
         dom = (rank == 0 ? 0 : 3);
 
-    //sprintf(fname, "/home/users/kab163/data/backup_fish8/fish_8.%01d.vtk", dom);
+    sprintf(fname, "/home/users/kab163/data/backup_fish8/fish_8.%01d.vtk", dom);
     //sprintf(fname, "/home/users/kab163/data/fish27VTK/fish27/fish27.%01d.vtk", dom);
-    //sprintf(fname, "/home/users/kab163/data/fusionVTK_64/fusion64.%01d.vtk", dom);
-    sprintf(fname, "/gpfs/alpine/scratch/kristib/csc331/data/fusion8_VTK/fusion8.%01d.vtk", dom);
+    //sprintf(fname, "/home/users/kab163/data/fusion8VTK/fusion8.%01d.vtk", dom);
+    //sprintf(fname, "/gpfs/alpine/scratch/kristib/csc331/data/fusion8_VTK/fusion8.%01d.vtk", dom);
     //sprintf(fname, "/ccs/home/kristib/data/fusion64_VTK/fusion64.%01d.vtk", dom); 
     //sprintf(fname, "/home/users/kab163/data/fusionVTK_27/fusion27.%01d.vtk", dom);
 

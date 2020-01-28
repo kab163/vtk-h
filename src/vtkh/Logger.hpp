@@ -3,7 +3,7 @@
 
 #include <vtkh/utils/StreamUtil.hpp>
 #include <stack>
-//#define ENABLE_LOGGING 1
+#define ENABLE_LOGGING 1
 
 //from rover logging
 namespace vtkh

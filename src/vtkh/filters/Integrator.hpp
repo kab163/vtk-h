@@ -17,6 +17,15 @@
 
 #include <vtkh/filters/Particle.hpp>
 
+#include <vtkh/Logger.hpp>
+#ifdef ENABLE_LOGGING
+#define DBG(msg) vtkh::Logger::GetInstance("out")->GetStream()<<msg
+#define WDBG(msg) vtkh::Logger::GetInstance("wout")->GetStream()<<msg
+#else
+#define DBG(msg)
+#define WDBG(msg)
+#endif
+
 class Integrator
 {
     typedef vtkm::Float64 FieldType;
@@ -65,6 +74,8 @@ public:
         vtkm::worklet::ParticleAdvection particleAdvection;
         vtkm::worklet::ParticleAdvectionResult result;
  
+	WDBG("max steps is " << maxSteps << std::endl);
+	// HRC: THIS IS WHERE VTK-m calls RK4
         result = particleAdvection.Run(rk4, seedArray, stepsTakenArray, maxSteps);
         auto posPortal = result.positions.GetPortalConstControl();
         auto statusPortal = result.status.GetPortalConstControl();
@@ -73,13 +84,16 @@ public:
         //Update particle data.
         //Need a functor to do this...
         int steps1 = 0;
+	WDBG("number of steps taken for seed 0 is _now_ " << stepsPortal.Get(0) << std::endl);
         for (int i = 0; i < nSeeds; i++)
         {
             particles[i].coords = posPortal.Get(i);
             particles[i].nSteps = stepsPortal.Get(i);
+	    WDBG("Nsteps for " << i << " is " << particles[i].nSteps << std::endl);
             UpdateStatus(particles[i], statusPortal.Get(i), maxSteps, I,T,A);
             steps1 += stepsPortal.Get(i);
         }
+	WDBG("steps1 = " << steps1 << ", steps0 = " << steps0 << std::endl);
 
         /*
         {
@@ -170,16 +184,19 @@ private:
     {
         if (p.nSteps >= maxSteps || status == vtkm::worklet::particleadvection::ParticleStatus::TERMINATED)
         {
+		WDBG("Terminating this particle, putting in T" << std::endl);
             p.status = vtkh::Particle::TERMINATE;
             T.push_back(p);
         }
         else if (status == vtkm::worklet::particleadvection::ParticleStatus::STATUS_OK)
         {
+		WDBG("particle is OK, putting in A" << std::endl);
             p.status = vtkh::Particle::ACTIVE;
             A.push_back(p);
         }
         else
         {
+		WDBG("particle is outofbounds, putting in I" << std::endl);
             p.status = vtkh::Particle::OUTOFBOUNDS;
             I.push_back(p);
         }
@@ -195,8 +212,10 @@ private:
         stepArray.Allocate(nSeeds);
         auto seedPortal = seedArray.GetPortalControl();
         auto stepPortal = stepArray.GetPortalControl();
+	    WDBG("Number of steps so far for seed 0 is " << particles[0].nSteps<<std::endl);
         for (int i = 0; i < nSeeds; i++)
         {
+		// HRC: ADD DEBUG STATEMENT HERE
             seedPortal.Set(i, particles[i].coords);
             stepPortal.Set(i, particles[i].nSteps);
             stepsTaken += particles[i].nSteps;

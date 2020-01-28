@@ -1,7 +1,7 @@
 #ifndef VTK_H_COMMUNICATOR_HPP
 #define VTK_H_COMMUNICATOR_HPP
 
-#if 0
+//#if 0
 
 #ifdef VTKH_PARALLEL
 
@@ -248,7 +248,7 @@ public:
     bool done;
 };
 
-#endif
+//#endif
 
 #endif
 #endif

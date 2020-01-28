@@ -188,8 +188,8 @@ public:
       vtkm::cont::RuntimeDeviceTracker &device_tracker
                                        = vtkm::cont::GetRuntimeDeviceTracker();
 
-      if(device_tracker.CanRunOn(vtkm::cont::DeviceAdapterTagOpenMP())) {
-        device_tracker.ForceDevice(vtkm::cont::DeviceAdapterTagOpenMP());
+      if(device_tracker.CanRunOn(vtkm::cont::DeviceAdapterTagSerial())) {
+        device_tracker.ForceDevice(vtkm::cont::DeviceAdapterTagSerial());
 	WDBG("CPU thread forcing vtkm to run with Device Adapter Tag OpenMP"<<std::endl);
       }
       else
@@ -214,15 +214,21 @@ public:
                 WDBG("CPU WORKER: Integrate "<<particlesC<<" --> "<<std::endl);
                 stats.Begin("CPU_Advect");
                 TIMER_START("advectC");
+		// HRC: this is what call integrate
                 int n = filter->InternalIntegrate<ResultT>(*blkC, particlesC, I, T, A, tracesC);
                 TIMER_STOP("advectC");
                 stats.End("CPU_Advect");
                 COUNTER_INC("advectStepsC", n);
-                WDBG("CPU TIA: "<<T<<" "<<I<<" "<<A<<std::endl<<std::endl);
+                WDBG("----------------------------------------"<<std::endl);
+		WDBG("HC!! There are ---- "<<workingOnC<<" ---- particles" <<std::endl);
+                WDBG("And we went  *** "<<n<<" *** steps" <<std::endl);
+                WDBG("----------------------------------------"<<std::endl);
+		WDBG("CPU TIA: "<<T<<" "<<I<<" "<<A<<std::endl<<std::endl);
 
                 worker_terminated.Insert(T);
                 worker_active.Insert(A);
                 worker_inactive.Insert(I);
+		WDBG("cpuWork has created an inactive queue of size " << worker_inactive.Size() << std::endl);
             }
             else
             {
@@ -312,7 +318,10 @@ public:
             worker_terminated.Get(term);
 
             int numTermMessages;
+	    DBG("Num inactive = " << out.size() << std::endl);
+	    DBG("Num terminated = " << term.size() << std::endl);
             communicator.Exchange(out, in, term, numTermMessages);
+	    DBG("Num in = " << in.size() << std::endl);
             int numTerm = term.size() + numTermMessages;
 
             if (!in.empty()) {
