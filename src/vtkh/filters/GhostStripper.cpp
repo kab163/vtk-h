@@ -1,5 +1,5 @@
 #include <vtkh/filters/GhostStripper.hpp>
-#include <vtkh/Logger.hpp>
+//#include <vtkh/Logger.hpp>
 #include <vtkh/utils/vtkm_dataset_info.hpp>
 #include <vtkh/vtkm_filters/vtkmThreshold.hpp>
 #include <vtkh/vtkm_filters/vtkmCleanGrid.hpp>
@@ -198,7 +198,7 @@ bool CanStrip(vtkm::cont::Field  &ghost_field,
               bool &should_strip)
 {
 
-  VTKH_DATA_OPEN("can_strip");
+  //VTKH_DATA_OPEN("can_strip");
   vtkm::cont::ArrayHandle<vtkm::Id> dim_indices;
 
   vtkm::Vec<vtkm::Id, 3> valid_min = {0,0,0};
@@ -240,7 +240,7 @@ bool CanStrip(vtkm::cont::Field  &ghost_field,
   vtkm::UInt8 res = vtkm::cont::Algorithm::Reduce(valid_flags,
                                                   vtkm::UInt8(0),
                                                   vtkm::Maximum());
-  VTKH_DATA_CLOSE();
+  //VTKH_DATA_CLOSE();
 
   bool can_strip = res == 0;
   if(can_strip)
@@ -270,7 +270,7 @@ bool StructuredStrip(vtkm::cont::DataSet &dataset,
                      vtkm::Vec<vtkm::Id,3> &max,
                      bool &should_strip)
 {
-  VTKH_DATA_OPEN("structured_strip");
+  //VTKH_DATA_OPEN("structured_strip");
   vtkm::cont::DynamicCellSet cell_set = dataset.GetCellSet();
   int dims[3];
   VTKMDataSetInfo::GetPointDims(cell_set, dims);
@@ -326,7 +326,7 @@ bool StructuredStrip(vtkm::cont::DataSet &dataset,
                             should_strip);
   }
 
-  VTKH_DATA_CLOSE();
+  //VTKH_DATA_CLOSE();
   return can_strip;
 }
 
@@ -412,7 +412,7 @@ void GhostStripper::DoExecute()
         do_threshold = false;
         if(should_strip)
         {
-          VTKH_DATA_OPEN("extract_structured");
+          //VTKH_DATA_OPEN("extract_structured");
           vtkm::RangeId3 range(min[0],max[0]+2, min[1], max[1]+2, min[2], max[2]+2);
           vtkm::Id3 sample(1, 1, 1);
 
@@ -423,7 +423,7 @@ void GhostStripper::DoExecute()
                                     this->GetFieldSelection());
 
           m_output->AddDomain(output, domain_id);
-          VTKH_DATA_CLOSE();
+          //VTKH_DATA_CLOSE();
         }
         else
         {

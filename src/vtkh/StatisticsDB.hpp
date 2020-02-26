@@ -5,6 +5,8 @@
 #include <mpi.h>
 #endif
 
+#define ENABLE_STATISTICS
+
 #include <math.h>
 #include <time.h>
 #include <sys/time.h>

@@ -1,6 +1,6 @@
 #include <vtkh/filters/Statistics.hpp>
 #include <vtkh/Error.hpp>
-#include <vtkh/Logger.hpp>
+//#include <vtkh/Logger.hpp>
 #include <vtkm/cont/Algorithm.h>
 #include <vtkm/cont/ArrayHandleCast.h>
 #include <vtkm/cont/Invoker.h>
@@ -111,10 +111,10 @@ Statistics::~Statistics()
 
 Statistics::Result Statistics::Run(vtkh::DataSet &data_set, const std::string field_name)
 {
-  VTKH_DATA_OPEN("statistics");
-  VTKH_DATA_ADD("device", GetCurrentDevice());
-  VTKH_DATA_ADD("input_cells", data_set.GetNumberOfCells());
-  VTKH_DATA_ADD("input_domains", data_set.GetNumberOfDomains());
+  //VTKH_DATA_OPEN("statistics");
+  //VTKH_DATA_ADD("device", GetCurrentDevice());
+  //VTKH_DATA_ADD("input_cells", data_set.GetNumberOfCells());
+  //VTKH_DATA_ADD("input_domains", data_set.GetNumberOfDomains());
   const int num_domains = data_set.GetNumberOfDomains();
 
   if(!data_set.GlobalFieldExists(field_name))
@@ -208,7 +208,7 @@ Statistics::Result Statistics::Run(vtkh::DataSet &data_set, const std::string fi
   vtkm::Float32 kurtosis = (sum4/vtkm::Float32(total_values))/vtkm::Pow(variance,2.f) - 3.0f;
   res.kurtosis = kurtosis;
 
-  VTKH_DATA_CLOSE();
+  //VTKH_DATA_CLOSE();
   return res;
 }
 

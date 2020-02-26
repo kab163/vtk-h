@@ -1,7 +1,7 @@
 #include "DataSet.hpp"
 
 #include <vtkh/Error.hpp>
-#include <vtkh/Logger.hpp>
+//#include <vtkh/Logger.hpp>
 
 // FIXME:UDA: vtkm_dataset_info depends on vtkm::rendering
 #include <vtkh/utils/vtkm_dataset_info.hpp>
@@ -243,7 +243,7 @@ DataSet::GetBounds(vtkm::Id coordinate_system_index) const
 vtkm::Bounds
 DataSet::GetGlobalBounds(vtkm::Id coordinate_system_index) const
 {
-  VTKH_DATA_OPEN("GetGlobalBounds");
+  //VTKH_DATA_OPEN("GetGlobalBounds");
   vtkm::Bounds bounds;
   bounds = GetBounds(coordinate_system_index);
 
@@ -312,7 +312,7 @@ DataSet::GetGlobalBounds(vtkm::Id coordinate_system_index) const
   bounds.Z.Min = global_z_min;
   bounds.Z.Max = global_z_max;
 #endif
-  VTKH_DATA_CLOSE();
+  //VTKH_DATA_CLOSE();
   return bounds;
 }
 
@@ -370,7 +370,7 @@ DataSet::GetRange(const std::string &field_name) const
 vtkm::cont::ArrayHandle<vtkm::Range>
 DataSet::GetGlobalRange(const std::string &field_name) const
 {
-  VTKH_DATA_OPEN("GetGlobalRange");
+  //VTKH_DATA_OPEN("GetGlobalRange");
   vtkm::cont::ArrayHandle<vtkm::Range> range;
   range = GetRange(field_name);
 
@@ -464,7 +464,7 @@ DataSet::GetGlobalRange(const std::string &field_name) const
 
   delete[] global_components;
 #endif
-  VTKH_DATA_CLOSE();
+  //VTKH_DATA_CLOSE();
   return range;
 }
 

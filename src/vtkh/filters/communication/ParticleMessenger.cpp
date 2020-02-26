@@ -1,17 +1,17 @@
 #include <iostream>
 #include <string.h>
-#include <vtkh/Logger.hpp>
+//#include <vtkh/Logger.hpp>
 #include <vtkh/StatisticsDB.hpp>
 #include <vtkh/filters/communication/MemStream.h>
 #include <vtkh/filters/communication/ParticleMessenger.hpp>
 
-#ifdef VTKH_ENABLE_LOGGING
-#define DBG(msg) vtkh::Logger::GetInstance("out")->GetStream()<<msg
-#define WDBG(msg) vtkh::Logger::GetInstance("wout")->GetStream()<<msg
-#else
-#define DBG(msg)
-#define WDBG(msg)
-#endif
+//#ifdef VTKH_ENABLE_LOGGING
+//#define DBG(msg) vtkh::Logger::GetInstance("out")->GetStream()<<msg
+//#define WDBG(msg) vtkh::Logger::GetInstance("wout")->GetStream()<<msg
+//#else
+//#define DBG(msg)
+//#define WDBG(msg)
+//#endif
 
 namespace vtkh
 {
@@ -226,7 +226,6 @@ ParticleMessenger::Exchange(std::vector<vtkh::Particle> &outData,
                             std::vector<vtkh::Particle> &term,
                             int &numTerminatedMessages)
 {
-  DBG("----ExchangeParticles: O="<<outData<<" I="<<inData<<std::endl);
   std::map<int, std::vector<Particle>> sendData;
 
   TIMER_START("communication");
@@ -241,7 +240,6 @@ ParticleMessenger::Exchange(std::vector<vtkh::Particle> &outData,
 
   if (RecvAny(&msgData, &particleData, false))
   {
-    DBG("-----Recv: M: "<<msgData<<" P: "<<particleData<<std::endl);
     for (auto &p : particleData)
         inData.insert(inData.end(), p.second.begin(), p.second.end());
 
@@ -250,11 +248,9 @@ ParticleMessenger::Exchange(std::vector<vtkh::Particle> &outData,
       if (m.second[0] == MSG_TERMINATE)
       {
           numTerminatedMessages += m.second[1];
-          DBG("-----TERMinate: Recv: "<<m.second[1]<<std::endl);
       }
       else if (m.second[0] == MSG_DONE)
       {
-        DBG("-----DONE RECEIVED: "<<m.second[1]<<std::endl);
         done = true;
       }
     }
@@ -264,7 +260,6 @@ ParticleMessenger::Exchange(std::vector<vtkh::Particle> &outData,
   if (!term.empty())
   {
     std::vector<int> msg = {MSG_TERMINATE, (int)term.size()};
-    DBG("-----SendAllMsg: msg="<<msg<<std::endl);
     SendAllMsg(msg);
   }
   if (!sendData.empty())
@@ -275,7 +270,6 @@ ParticleMessenger::Exchange(std::vector<vtkh::Particle> &outData,
   }
 
   CheckPendingSendRequests();
-  DBG("----ExchangeParticles Done: I= "<<inData<<" T= "<<term<<std::endl<<std::endl);
   TIMER_STOP("communication");
 }
 

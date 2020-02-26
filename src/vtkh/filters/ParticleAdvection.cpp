@@ -8,7 +8,7 @@
 
 #include <vtkh/vtkh.hpp>
 #include <vtkh/Error.hpp>
-#include <vtkh/Logger.hpp>
+//#include <vtkh/Logger.hpp>
 #include <vtkh/utils/StreamUtil.hpp>
 #include <vtkh/utils/ThreadSafeContainer.hpp>
 
@@ -21,13 +21,13 @@
 #include <vtkh/filters/ParticleAdvectionTask.hpp>
 #endif
 
-#ifdef VTKH_ENABLE_LOGGING
-#define DBG(msg) vtkh::Logger::GetInstance("out")->GetStream()<<msg
-#define WDBG(msg) vtkh::Logger::GetInstance("wout")->GetStream()<<msg
-#else
-#define DBG(msg)
-#define WDBG(msg)
-#endif
+//#ifdef VTKH_ENABLE_LOGGING
+//#define DBG(msg) vtkh::Logger::GetInstance("out")->GetStream()<<msg
+//#define WDBG(msg) vtkh::Logger::GetInstance("wout")->GetStream()<<msg
+//#else
+//#define DBG(msg)
+//#define WDBG(msg)
+//#endif
 
 namespace vtkh
 {
@@ -82,6 +82,7 @@ void ParticleAdvection::PreExecute()
     this->m_input->GetDomain(i, dom, id);
 
     dataBlocks.push_back(new DataBlockIntegrator(id, &dom, m_field_name, stepSize));
+    dataBlocks.push_back(new DataBlockIntegrator(id + 1000, &dom, m_field_name, stepSize));
     boundsMap.AddBlock(id, dom.GetCoordinateSystem().GetBounds());
   }
 
@@ -145,23 +146,17 @@ void ParticleAdvection::TraceSingleThread(std::vector<ResultT> &traces)
   int N = 0;
   while (true)
   {
-      DBG("MANAGE: termCount= "<<terminated.size()<<std::endl<<std::endl);
       std::vector<Particle> v, I, T, A;
 
       if (GetActiveParticles(v))
       {
           COUNTER_INC("myParticles", v.size());
-          DBG("GetActiveParticles: "<<v<<std::endl);
           DataBlockIntegrator *blk = GetBlock(v[0].blockIds[0]);
-          DBG("Integrate: "<<v<<std::endl);
-          DBG("Loading Block: "<<v[0].blockIds[0]<<std::endl);
 
           TIMER_START("advect");
           int n = InternalIntegrate<ResultT>(*blk, v, I, T, A, traces);
           TIMER_STOP("advect");
           COUNTER_INC("advectSteps", n);
-          DBG("--Integrate:  ITA: "<<I<<" "<<T<<" "<<A<<std::endl);
-          DBG("                   I= "<<I<<std::endl);
           if (!A.empty())
               active.insert(active.end(), A.begin(), A.end());
       }
@@ -178,7 +173,6 @@ void ParticleAdvection::TraceSingleThread(std::vector<ResultT> &traces)
 
       N += numTerm;
 
-      DBG("Manage: N= "<<N<<std::endl);
       if (N > totalNumSeeds)
           throw "Particle count error";
 
@@ -193,10 +187,6 @@ void ParticleAdvection::TraceSingleThread(std::vector<ResultT> &traces)
           COUNTER_INC("naps", 1);
       }
   }
-  DBG("TIA: "<<terminated.size()<<" "<<inactive.size()<<" "<<active.size()<<std::endl);
-  DBG("RESULTS= "<<traces.size()<<std::endl);
-
-  DBG("All done"<<std::endl);
 #endif
 }
 
@@ -442,8 +432,10 @@ ParticleAdvection::Init()
   //Initialize timers/counters.
   ADD_TIMER("total");
   ADD_TIMER("sleep");
-  ADD_TIMER("advect");
-  ADD_COUNTER("advectSteps");
+  ADD_TIMER("advectC");
+  ADD_TIMER("advectG");
+  ADD_COUNTER("advectStepsC");
+  ADD_COUNTER("advectStepsG");  
   ADD_COUNTER("myParticles");
   ADD_COUNTER("naps");
 
@@ -541,7 +533,7 @@ ParticleAdvection::CreateSeeds()
         {
             seeds[i].blockIds = domainIds[i];
             active.push_back(seeds[i]);
-            if (domainIds[i].size() > 1) DBG("WE have a DUP: "<<seeds[i]<<std::endl);
+//            if (domainIds[i].size() > 1) DBG("WE have a DUP: "<<seeds[i]<<std::endl);
 
         }
     }

@@ -10,11 +10,14 @@
 #include <vtkh/DataSet.hpp>
 #include <vtkh/filters/ParticleAdvection.hpp>
 #include <vtkm/io/writer/VTKDataSetWriter.h>
+#include <vtkm/io/reader/VTKDataSetReader.h>
 #include <vtkm/cont/DataSet.h>
 #include <vtkm/cont/DataSetFieldAdd.h>
 #include "t_test_utils.hpp"
 #include <iostream>
 #include <mpi.h>
+
+int init_seeds, init_steps;
 
 void checkValidity(vtkh::DataSet *data, const int maxSteps)
 {
@@ -62,21 +65,52 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
   vtkh::DataSet data_set;
   const int base_size = 32;
   const int blocks_per_rank = 1;
-  const int maxAdvSteps = 100;
+  const int maxAdvSteps = init_steps;
   const int num_blocks = comm_size * blocks_per_rank;
-
-  for(int i = 0; i < blocks_per_rank; ++i)
-  {
-    int domain_id = rank * blocks_per_rank + i;
-    data_set.AddDomain(CreateTestDataRectilinear(domain_id, num_blocks, base_size), domain_id);
+  
+  std::string fieldName = "vector_data_Float64";
+  
+  if (0) {
+    for(int i = 0; i < blocks_per_rank; ++i)
+    {
+      int domain_id = rank * blocks_per_rank + i;
+      data_set.AddDomain(CreateTestDataRectilinear(domain_id, num_blocks, base_size), domain_id);
+    }
   }
+  else {
+    fieldName = "grad";
+    char fname[512];
+    int dom = rank;
+    if (comm_size == 2)
+        dom = (rank == 0 ? 0 : 3);
 
+    //sprintf(fname, "/home/users/kab163/data/backup_fish8/fish_8.%01d.vtk", dom);
+    //sprintf(fname, "/home/users/kab163/data/fish27VTK/fish27/fish27.%01d.vtk", dom);
+    //sprintf(fname, "/home/users/kab163/data/fusion8VTK/fusion8.%01d.vtk", dom);
+    sprintf(fname, "/gpfs/alpine/scratch/kristib/csc331/data/fusion8_VTK/fusion8.%01d.vtk", dom);
+    //sprintf(fname, "/ccs/home/kristib/data/fusion64_VTK/fusion64.%01d.vtk", dom); 
+    //sprintf(fname, "/home/users/kab163/data/fusionVTK_27/fusion27.%01d.vtk", dom);
+
+    std::cout<<"LOADING: "<<fname<<std::endl;
+    vtkm::io::reader::VTKDataSetReader reader(fname);
+    auto ds = reader.ReadDataSet();
+    vtkm::cont::ArrayHandle<vtkm::Vec<double,3>> field;
+    ds.GetField(fieldName).GetData().CopyTo(field);
+    auto fportal = ds.GetField(fieldName).GetData();
+    int nVecs = fportal.GetNumberOfValues();
+    data_set.AddDomain(ds, rank);
+
+  }
+  
   vtkh::ParticleAdvection streamline;
   streamline.SetInput(&data_set);
-  streamline.SetField("vector_data_Float64");
+  streamline.SetField(fieldName);
   streamline.SetMaxSteps(maxAdvSteps);
-  streamline.SetStepSize(0.1);
-  streamline.SetSeedsRandomWhole(500);
+  streamline.SetStepSize(0.001);
+  streamline.SetSeedsRandomWhole(init_seeds);
+  streamline.SetUseThreadedVersion(true);
+  streamline.SetDumpOutputFiles(false);
+  streamline.SetGatherTraces(false);
   streamline.Update();
   vtkh::DataSet *streamline_output = streamline.GetOutput();
 
@@ -85,4 +119,20 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
 
   MPI_Barrier(MPI_COMM_WORLD);
   MPI_Finalize();
+}
+
+int main(int argc, char* argv[])
+{
+    int result = 0;
+    ::testing::InitGoogleTest(&argc, argv);
+
+    // allow override of the data size via the command line
+    if(argc >= 2)
+    {
+      init_seeds = atoi(argv[1]);
+      init_steps = atoi(argv[2]);
+    }
+
+    result = RUN_ALL_TESTS();
+    return result;
 }
