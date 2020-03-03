@@ -39,6 +39,7 @@ public:
         if (!p.p.Status.CheckTookAnySteps()) os<<"NO_STEPS ";
         os<<"}";
         os<<" bid = "<<p.blockIds;
+        os<<" rT = "<<p.p.ResidentTime;
         os<<")";
         return os;
     }
@@ -56,6 +57,7 @@ struct Serialization<vtkh::Particle>
     vtkh::write(memstream, data.p.Status);
     vtkh::write(memstream, data.p.NumSteps);
     vtkh::write(memstream, data.p.Time);
+    vtkh::write(memstream, data.p.ResidentTime);
     vtkh::write(memstream, data.blockIds);
   }
 
@@ -68,6 +70,7 @@ struct Serialization<vtkh::Particle>
     vtkh::read(memstream, data.p.Status);
     vtkh::read(memstream, data.p.NumSteps);
     vtkh::read(memstream, data.p.Time);
+    vtkh::read(memstream, data.p.ResidentTime);
     vtkh::read(memstream, data.blockIds);
   }
 };

@@ -14,10 +14,90 @@
 #include <vtkm/worklet/particleadvection/GridEvaluators.h>
 #include <vtkm/worklet/particleadvection/Integrators.h>
 #include <vtkm/worklet/particleadvection/Particles.h>
+#include <vtkm/worklet/particleadvection/ParticleAdvectionWorklets.h>
+#include <vtkm/worklet/particleadvection/IntegratorStatus.h>
 
 #include <vtkh/vtkh_exports.h>
 #include <vtkh/filters/Particle.hpp>
 #include <vtkh/utils/ThreadSafeContainer.hpp>
+#include <vtkh/StatisticsDB.hpp>
+
+#ifdef VTKH_ENABLE_LOGGING
+#define DBG(msg) vtkh::Logger::GetInstance("out")->GetStream()<<msg
+#define WDBG(msg) vtkh::Logger::GetInstance("wout")->GetStream()<<msg
+#else
+#define DBG(msg)
+#define WDBG(msg)
+#endif
+
+
+class ParticleAdvectWorkletORIG : public vtkm::worklet::WorkletMapField
+{
+public:
+  using ControlSignature = void(FieldIn idx,
+                                ExecObject integrator,
+                                ExecObject integralCurve,
+                                FieldIn maxSteps);
+  using ExecutionSignature = void(_1 idx, _2 integrator, _3 integralCurve, _4 maxSteps);
+  using InputDomain = _1;
+
+  template <typename IntegratorType, typename IntegralCurveType>
+  VTKM_EXEC void operator()(const vtkm::Id& idx,
+                            const IntegratorType* integrator,
+                            IntegralCurveType& integralCurve,
+                            const vtkm::Id& maxSteps) const
+  {
+    vtkm::Particle particle = integralCurve.GetParticle(idx);
+
+    vtkm::Vec3f inpos = particle.Pos;
+    vtkm::FloatDefault time = particle.Time;
+    bool tookAnySteps = false;
+
+    //the integrator status needs to be more robust:
+    // 1. you could have success AND at temporal boundary.
+    // 2. could you have success AND at spatial?
+    // 3. all three?
+
+    integralCurve.PreStepUpdate(idx);
+    do
+    {
+      //vtkm::Particle p = integralCurve.GetParticle(idx);
+      //std::cout<<idx<<": "<<inpos<<" #"<<p.NumSteps<<" "<<p.Status<<std::endl;
+      vtkm::Vec3f outpos;
+      auto status = integrator->Step(inpos, time, outpos);
+      if (status.CheckOk())
+      {
+        integralCurve.StepUpdate(idx, time, outpos);
+        tookAnySteps = true;
+        inpos = outpos;
+      }
+
+      //We can't take a step inside spatial boundary.
+      //Try and take a step just past the boundary.
+      else if (status.CheckSpatialBounds())
+      {
+        auto status2 = integrator->SmallStep(inpos, time, outpos);
+        if (status2.CheckOk())
+        {
+          integralCurve.StepUpdate(idx, time, outpos);
+          tookAnySteps = true;
+
+          //we took a step, so use this status to consider below.
+          status = status2;
+        }
+      }
+
+      integralCurve.StatusUpdate(idx, status, maxSteps);
+
+    } while (integralCurve.CanContinue(idx));
+
+    //Mark if any steps taken
+    integralCurve.UpdateTookSteps(idx, tookAnySteps);
+
+    //particle = integralCurve.GetParticle(idx);
+    //std::cout<<idx<<": "<<inpos<<" #"<<particle.NumSteps<<" "<<particle.Status<<std::endl;
+  }
+};
 
 
 class VTKH_API Integrator
@@ -44,13 +124,15 @@ public:
                std::vector<vtkh::Particle> &A,
                std::vector<vtkm::worklet::ParticleAdvectionResult> *particleTraces,
                vtkh::ThreadSafeContainer<vtkh::Particle, std::vector> &workerInactive,
-               vtkh::StatisticsDB& statsDB);
+               vtkh::StatisticsDB& statsDB,
+               bool delaySend=false);
 
     int Advect(std::vector<vtkh::Particle> &particles,
                vtkm::Id maxSteps,
                std::vector<vtkh::Particle> &I,
                std::vector<vtkh::Particle> &T,
                std::vector<vtkh::Particle> &A,
+               vtkh::StatisticsDB& statsDB,
                std::vector<vtkm::worklet::ParticleAdvectionResult> *particleTraces=NULL)
     {
         size_t nSeeds = particles.size();
@@ -58,10 +140,36 @@ public:
 
         int steps0 = SeedPrep(particles, seedArray);
 
+#ifdef VTKH_USE_CUDA
+    // This worklet needs some extra space on CUDA.
+    vtkm::cont::cuda::ScopedCudaStackSize stack(16 * 1024);
+    (void)stack;
+#endif
         vtkm::worklet::ParticleAdvection particleAdvection;
         vtkm::worklet::ParticleAdvectionResult result;
 
+        vtkh::StopWatch residentTimer;
+        residentTimer.Start();
+#if 1
+        using ParticleType = vtkm::worklet::particleadvection::Particles;
+        vtkm::Id numSeeds = static_cast<vtkm::Id>(seedArray.GetNumberOfValues());
+        ParticleAdvectWorkletORIG worklet;
+        ParticleType particlesObj(seedArray, maxSteps);
+        vtkm::cont::ArrayHandleConstant<vtkm::Id> maxStepArr(maxSteps, numSeeds);
+        vtkm::cont::ArrayHandleIndex idxArray(numSeeds);
+
+        vtkm::worklet::DispatcherMapField<ParticleAdvectWorkletORIG> dispatcher(worklet);
+        TIMER_START("residentTime");
+        dispatcher.Invoke(idxArray, rk4, particlesObj, maxStepArr);
+        TIMER_STOP("residentTime");
+        result = vtkm::worklet::ParticleAdvectionResult(seedArray);
+#else
+        TIMER_START("residentTime");
         result = particleAdvection.Run(rk4, seedArray, maxSteps);
+        TIMER_STOP("residentTime");
+#endif
+
+        double residentTime = residentTimer.Stop();
         auto parPortal = result.Particles.GetPortalConstControl();
 
         //Update particle data.
@@ -70,6 +178,7 @@ public:
         for (int i = 0; i < nSeeds; i++)
         {
             particles[i].p = parPortal.Get(i);
+            particles[i].p.ResidentTime += residentTime;
             UpdateParticle(particles[i], I,T,A);
             steps1 += particles[i].p.NumSteps;
         }

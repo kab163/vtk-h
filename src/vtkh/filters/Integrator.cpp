@@ -124,7 +124,8 @@ int Integrator::Advect(std::vector<vtkh::Particle> &particles,
                        std::vector<vtkh::Particle> &A,
                        std::vector<vtkm::worklet::ParticleAdvectionResult> *particleTraces,
                        vtkh::ThreadSafeContainer<vtkh::Particle, std::vector> &workerInactive,
-                       vtkh::StatisticsDB& statsDB)
+                       vtkh::StatisticsDB& statsDB,
+                       bool delaySend)
 {
     vtkm::cont::ArrayHandle<vtkm::Particle> seedArray;
     int steps0 = SeedPrep(particles, seedArray);
@@ -161,11 +162,17 @@ int Integrator::Advect(std::vector<vtkh::Particle> &particles,
     vtkm::Id loop = 0;
     int steps1 = 0;
 
+    double residentTime = 0;
     while (!done)
     {
+        vtkh::StopWatch residentTimer;
+        residentTimer.Start();
+        TIMER_START("residentTime");
         dispatcher.Invoke(idxArray, rk4, particlesObj, maxStepArr, ActiveArr);
+        TIMER_STOP("residentTime");
+        residentTime += residentTimer.Stop();
         vtkm::Id currRemain = vtkm::cont::Algorithm::Reduce(ActiveArr, vtkm::Id(0));
-        vtkm::Id justCompleted = prevRemain - currRemain;
+        //vtkm::Id justCompleted = prevRemain - currRemain;
 
         done = (currRemain == 0);
 
@@ -199,6 +206,7 @@ int Integrator::Advect(std::vector<vtkh::Particle> &particles,
             {
                 vtkh::Particle p;
                 p.p = outP.Get(i);
+                p.p.ResidentTime += residentTime;
                 p.blockIds = particles[outI.Get(i)].blockIds;
                 steps1 += p.p.NumSteps;
 
@@ -213,17 +221,19 @@ int Integrator::Advect(std::vector<vtkh::Particle> &particles,
             }
             TIMER_STOP("batchCopyParticles");
 
-            if (rank == 0) std::cout<<"Batch: Process: "<<out.GetNumberOfValues()<<" AsyncTIA: "<<tmpT.size()<<" "<<tmpI.size()<<" "<<tmpA.size()<<std::endl;
+//            if (rank == 0) std::cout<<"Batch: Process: "<<out.GetNumberOfValues()<<" AsyncTIA: "<<tmpT.size()<<" "<<tmpI.size()<<" "<<tmpA.size()<<std::endl;
             if (!tmpI.empty())
                 COUNTER_INC("batchSends", tmpI.size());
 
-            workerInactive.Insert(tmpI);
+            if (delaySend)
+              I.insert(I.end(), tmpI.begin(), tmpI.end());
+            else
+              workerInactive.Insert(tmpI);
             T.insert(T.end(), tmpT.begin(), tmpT.end());
             A.insert(A.end(), tmpA.begin(), tmpA.end());
         }
 
-        if (rank == 0)
-            std::cout<<loop<<": "<<prevRemain<<" --> "<<currRemain<<" : "<<justCompleted<<" done= "<<done<<std::endl;
+//        if (rank == 0) std::cout<<loop<<": "<<prevRemain<<" --> "<<currRemain<<" : "<<justCompleted<<" done= "<<done<<std::endl;
 
         prevRemain = currRemain;
         loop++;
@@ -239,8 +249,7 @@ int Integrator::Advect(std::vector<vtkh::Particle> &particles,
         particleTraces->push_back(result);
 
     vtkm::Particle p1 = seedArray.GetPortalControl().Get(0);
-    if (rank == 0)
-        std::cout<<p0.ID<<" "<<p0.Pos<<" ---> "<<p1.ID<<" "<<p1.Pos<<std::endl;
+//    if (rank == 0) std::cout<<p0.ID<<" "<<p0.Pos<<" ---> "<<p1.ID<<" "<<p1.Pos<<std::endl;
 
     int totalSteps = steps1-steps0;
     return totalSteps;

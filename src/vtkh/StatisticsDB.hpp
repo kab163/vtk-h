@@ -113,12 +113,12 @@ public:
             if (vals.empty())
             {
                 minI = maxI = -1;
-                min = max = med = sum = -1;
-                mean = std_dev = -1;
+                min = max = med = sum = T(-1);
+                mean = std_dev = -1.f;
             }
             else
             {
-                sum = accumulate(vals.begin(), vals.end(), 0);
+                sum = accumulate(vals.begin(), vals.end(), T(0));
 
                 //Get min/max info.
                 auto res = minmax_element(vals.begin(), vals.end());
@@ -343,7 +343,7 @@ public:
             for (it = events.begin(); it != events.end(); it++)
             {
                 //Normalize timings.
-                it->second.Normalize(allMin, allMax);
+                //it->second.Normalize(allMin, allMax);
 
                 //Rank 0 will recv everything.
                 if (rank == 0)
@@ -434,6 +434,11 @@ extern vtkh::StatisticsDB statsDB;
 #define TIMER_START(nm) statsDB.Start(nm)
 #define TIMER_STOP(nm) statsDB.Stop(nm)
 #define DUMP_STATS(fname) statsDB.DumpStats(fname)
+
+#define ADD_EVENT(nm) statsDB.AddEvent(nm)
+#define SET_EVENT_T0(t0) statsDB.SetEventT0(t0)
+#define EVENT_BEGIN(nm) statsDB.Begin(nm)
+#define EVENT_END(nm) statsDB.End(nm)
 #else
 #define ADD_COUNTER(nm)
 #define COUNTER_INC(nm, val)
@@ -442,6 +447,11 @@ extern vtkh::StatisticsDB statsDB;
 #define TIMER_START(nm)
 #define TIMER_STOP(nm)
 #define DUMP_STATS(fname)
+
+#define ADD_EVENT(nm)
+#define SET_EVENT_T0(t0)
+#define EVENT_BEGIN(nm)
+#define EVENT_END(nm)
 #endif
 }
 

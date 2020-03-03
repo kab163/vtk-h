@@ -54,7 +54,10 @@ ParticleAdvection::ParticleAdvection()
       dumpOutputFiles(false),
       sleepUS(100),
       batchSize(-1),
-      statsFile("particleAdvection.stats.txt")
+      statsFile("particleAdvection.stats.txt"),
+      dumpResidentTime(false),
+      residentTimeFile("residentTime.txt"),
+      delaySend(false)
 {
 #ifdef VTKH_PARALLEL
   rank = vtkh::GetMPIRank();
@@ -106,6 +109,33 @@ void ParticleAdvection::TraceMultiThread(std::vector<ResultT> &traces)
   task->Init(active, totalNumSeeds, sleepUS, batchSize);
   task->Go();
   task->results.Get(traces);
+
+  if (dumpResidentTime)
+  {
+      std::vector<vtkh::Particle> term;
+      task->terminated.Get(term);
+
+      std::vector<vtkm::Float64> array(totalNumSeeds, 0.0), result;
+
+      if (rank == 0)
+          result.resize(totalNumSeeds, 0.0);
+
+      int n = term.size();
+      for (auto &p : term)
+          array[p.p.ID] = p.p.ResidentTime;
+      MPI_Reduce(&array[0], &result[0], totalNumSeeds, MPI_DOUBLE, MPI_SUM, 0, mpiComm);
+
+      if (rank == 0)
+      {
+          std::ofstream output;
+          output.open(residentTimeFile, std::ofstream::out);
+
+          for (int i = 0; i < totalNumSeeds; i++)
+              output<<i<<" "<<result[i]<<std::endl;
+          output.close();
+      }
+  }
+
 #endif
 }
 
@@ -118,7 +148,7 @@ ParticleAdvection::InternalIntegrate<vtkm::worklet::ParticleAdvectionResult>(Dat
                                                                              std::vector<Particle> &A,
                                           std::vector<vtkm::worklet::ParticleAdvectionResult> &traces)
 {
-  return blk.integrator.Advect(v, maxSteps, I, T, A, &traces);
+  return blk.integrator.Advect(v, maxSteps, I, T, A, statsDB, &traces);
 }
 
 template<>
@@ -132,10 +162,10 @@ ParticleAdvection::InternalIntegrate<vtkm::worklet::ParticleAdvectionResult>(Dat
                                            vtkh::ThreadSafeContainer<Particle, std::vector> &workerInactive)
 {
   if (batchSize == -1)
-    return blk.integrator.Advect(v, maxSteps, I, T, A, &traces);
+    return blk.integrator.Advect(v, maxSteps, I, T, A, statsDB, &traces);
   else
   {
-    return blk.integrator.Advect(v, maxSteps, I, T, A, &traces, workerInactive, statsDB);
+      return blk.integrator.Advect(v, maxSteps, I, T, A, &traces, workerInactive, statsDB, delaySend);
   }
 }
 
@@ -236,7 +266,15 @@ void ParticleAdvection::TraceSingleThread(std::vector<ResultT> &traces)
 template <typename ResultT>
 void ParticleAdvection::TraceSeeds(std::vector<ResultT> &traces)
 {
+#ifdef VTKH_PARALLEL
+  MPI_Barrier(MPI_COMM_WORLD);
+  eventT0 = MPI_Wtime();
+#else
+  eventT0 = -1;
+#endif
+  SET_EVENT_T0(eventT0);
   TIMER_START("total");
+  EVENT_BEGIN("main");
 
   if (useThreadedVersion)
       TraceMultiThread<ResultT>(traces);
@@ -244,6 +282,7 @@ void ParticleAdvection::TraceSeeds(std::vector<ResultT> &traces)
       TraceSingleThread<ResultT>(traces);
 
   TIMER_STOP("total");
+  EVENT_END("main");
   DUMP_STATS(statsFile);
 }
 
@@ -292,7 +331,7 @@ void ParticleAdvection::DoExecute()
     this->TraceSeeds<vtkm::worklet::StreamlineResult>(particleTraces);
 
     this->m_output = new DataSet();
-    std::cout<<"All done: "<<particleTraces.size()<<std::endl;
+    //std::cout<<"All done: "<<particleTraces.size()<<std::endl;
 
     if (!particleTraces.empty() && this->dumpOutputFiles)
     {
@@ -538,12 +577,15 @@ ParticleAdvection::Init()
   ADD_TIMER("advect");
   ADD_TIMER("batchProcess");
   ADD_TIMER("batchCopyParticles");
+  ADD_TIMER("residentTime");
   ADD_COUNTER("advectSteps");
   ADD_COUNTER("myParticles");
   ADD_COUNTER("naps");
   ADD_COUNTER("beginParticles");
   ADD_COUNTER("batchRounds");
   ADD_COUNTER("batchSends");
+  ADD_EVENT("main");
+  ADD_EVENT("integrate");
 }
 
 DataBlockIntegrator *

@@ -73,6 +73,8 @@ public:
   }
 
   void SetStatsFile(std::string& s) {statsFile = s;}
+  void SetResidentTimeDump(std::string& fname) {dumpResidentTime = true; residentTimeFile = fname;}
+  void SetDelaySend(bool v) {delaySend=v;}
 
   void SetField(const std::string &field_name) {m_field_name = field_name;}
   void SetStepSize(const double &v) { stepSize = v;}
@@ -134,6 +136,10 @@ protected:
   vtkm::Vec<double,3> seedPoint;
   int batchSize;
   std::string statsFile;
+  std::string residentTimeFile;
+  bool dumpResidentTime;
+  bool delaySend;
+  double eventT0;
 
   float stepSize;
 

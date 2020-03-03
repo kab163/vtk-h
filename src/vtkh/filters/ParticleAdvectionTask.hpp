@@ -171,6 +171,7 @@ public:
                 DataBlockIntegrator *blk = filter->GetBlock(particles[0].blockIds[0]);
 
                 TIMER_START("advect");
+                EVENT_BEGIN("integrate");
                 WDBG("WORKER: Integrate "<<particles<<" --> "<<std::endl);
                 int n;
                 if (batchSize == -1)
@@ -178,6 +179,7 @@ public:
                 else
                     n = filter->InternalIntegrate<ResultT>(*blk, particles, I, T, A, traces, worker_inactive);
 
+                EVENT_END("integrate");
                 TIMER_STOP("advect");
                 COUNTER_INC("advectSteps", n);
                 WDBG("TIA: "<<T<<" "<<I<<" "<<A<<std::endl<<std::endl);

@@ -4,28 +4,28 @@
 
 set(vtkh_filters_headers
   Filter.hpp
-  CellAverage.hpp
-  CleanGrid.hpp
-  Clip.hpp
-  ClipField.hpp
-  Gradient.hpp
+#  CellAverage.hpp
+#  CleanGrid.hpp
+#  Clip.hpp
+#  ClipField.hpp
+#  Gradient.hpp
 #  GhostStripper.hpp
 #  HistSampling.hpp
 #  Histogram.hpp
 #  Log.hpp
-  IsoVolume.hpp
-  NoOp.hpp
-  Lagrangian.hpp
-  MarchingCubes.hpp
+#  IsoVolume.hpp
+#  NoOp.hpp
+#  Lagrangian.hpp
+#  MarchingCubes.hpp
   Particle.hpp
   ParticleAdvection.hpp
   Integrator.hpp
   PointAverage.hpp
-  Recenter.hpp
-  Threshold.hpp
+#  Recenter.hpp
+#  Threshold.hpp
 #  Statistics.hpp
-  Slice.hpp
-  VectorMagnitude.hpp
+#  Slice.hpp
+#  VectorMagnitude.hpp
   communication/BoundsMap.hpp
   communication/Communicator.hpp
   communication/MemStream.h
@@ -39,27 +39,27 @@ set(vtkh_comm_filters_headers
 
 set(vtkh_filters_sources
   Filter.cpp
-  CellAverage.cpp
-  CleanGrid.cpp
-  Clip.cpp
-  ClipField.cpp
-  Gradient.cpp
+#  CellAverage.cpp
+#  CleanGrid.cpp
+#  Clip.cpp
+#  ClipField.cpp
+#  Gradient.cpp
 #  GhostStripper.cpp
 #  HistSampling.cpp
 #  Histogram.cpp
 #  Log.cpp
   Integrator.cpp
-  IsoVolume.cpp
-  NoOp.cpp
-  Lagrangian.cpp
-  MarchingCubes.cpp
+#  IsoVolume.cpp
+#  NoOp.cpp
+#  Lagrangian.cpp
+#  MarchingCubes.cpp
   ParticleAdvection.cpp
-  PointAverage.cpp
-  Recenter.cpp
-  Threshold.cpp
-  Slice.cpp
+#  PointAverage.cpp
+#  Recenter.cpp
+#  Threshold.cpp
+#  Slice.cpp
 #  Statistics.cpp
-  VectorMagnitude.cpp
+#  VectorMagnitude.cpp
   communication/MemStream.cpp
   )
 

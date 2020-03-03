@@ -75,7 +75,11 @@ void LoadData(const std::string &fname, vtkh::DataSet &dataSet)
       std::string buff;
       std::ifstream is;
       is.open(args["--filename"]);
-      if (!is) throw "unknown file";
+      if (!is)
+      {
+          std::cout<<"File not found! : "<<args["--filename"]<<std::endl;
+      }
+      if (!is) throw "unknown file: " + args["--filename"];
 
       auto p0 = fname.rfind(".visit");
       if (p0 == std::string::npos)
@@ -101,7 +105,6 @@ void LoadData(const std::string &fname, vtkh::DataSet &dataSet)
               vtkm::cont::DataSet ds;
               std::string vtkFile = dir + "/" + buff;
               vtkm::io::reader::VTKDataSetReader reader(vtkFile);
-              if (rank == 0) std::cout<<i<<" : "<<vtkFile<<std::endl;
               ds = reader.ReadDataSet();
               int np = ds.GetNumberOfPoints();
 
@@ -129,7 +132,12 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   vtkh::SetMPICommHandle(MPI_Comm_c2f(MPI_COMM_WORLD));
 
-  std::cout << "Running parallel Particle Advection, vtkh - with " << nRanks << " ranks" << std::endl;
+
+  if (rank == 0)
+  {
+      std::cout << "Running parallel Particle Advection, vtkh - with " << nRanks << " ranks" << std::endl;
+      //std::cout<<args<<std::endl;
+  }
 
   vtkh::DataSet dataSet;
 
@@ -145,6 +153,24 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
   streamline.SetStepSize(std::stof(args["--stepSize"]));
   streamline.SetSeedsRandomWhole(std::stoi(args["--numSeeds"]));
   streamline.SetUseThreadedVersion(std::stoi(args["--threaded"]));
+  streamline.SetDelaySend(std::stoi(args["--delaySend"]));
+  std::string device = args["--device"];
+
+  if (rank == 0) std::cout<<"********************************** CUDAAvail= "<<vtkh::IsCUDAAvailable()<<std::endl;
+
+  if (device == "serial")
+      if (vtkh::IsSerialAvailable()) vtkh::ForceSerial();
+      else throw "Serial device not available!";
+  else if (device == "openmp")
+      if (vtkh::IsOpenMPAvailable()) vtkh::ForceOpenMP();
+      else throw "OpenMP device not available";
+  else if (device == "cuda")
+      if (vtkh::IsCUDAAvailable()) vtkh::ForceCUDA();
+      else throw "CUDA device not available";
+
+//  std::string dev = vtkh::GetCurrentDevice();
+  if (rank == 0) std::cout<<" ***** Current Device= "<<vtkh::GetCurrentDevice()<<std::endl;
+
   if (args["--box"] != "")
   {
       std::string s, str = args["--box"];
@@ -158,7 +184,16 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
       streamline.SetSeedsRandomBox(std::stoi(args["--numSeeds"]), box);
   }
   if (args["--statsfile"] != "")
+  {
+      //mark it as started....
+      std::string s = args["--statsfile"];
+      FILE *fp = fopen(s.c_str(), "w");
+      fprintf(fp, "Running...\n");
+      fclose(fp);
       streamline.SetStatsFile(args["--statsfile"]);
+  }
+  if (args["--residentTime"] != "")
+      streamline.SetResidentTimeDump(args["--residentTime"]);
 
   //streamline.SetSeedPoint(vtkm::Vec3f(1,1,1));
   streamline.SetBatchSize(std::stoi(args["--batchSize"]));
@@ -187,6 +222,9 @@ int main(int argc, char* argv[])
     args["--box"] = "";
     args["--threaded"] = "0";
     args["--statsfile"] = "";
+    args["--device"] = "serial";
+    args["--residentTime"] = "";
+    args["--delaySend"] = "0";
 
     int i = 1;
     while (i < argc)
@@ -216,8 +254,10 @@ int main(int argc, char* argv[])
         args[a0] = a1;
     }
 
+/*
     for (auto m : args)
         std::cout<<"("<<m.first<<" "<<m.second<<")"<<std::endl;
+*/
 
     int result = 0;
     ::testing::InitGoogleTest(&argc, argv);
