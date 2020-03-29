@@ -154,10 +154,11 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
   streamline.SetSeedsRandomWhole(std::stoi(args["--numSeeds"]));
   streamline.SetUseThreadedVersion(std::stoi(args["--threaded"]));
   streamline.SetDelaySend(std::stoi(args["--delaySend"]));
-  std::string device = args["--device"];
+  //std::string device = args["--device"];
 
   if (rank == 0) std::cout<<"********************************** CUDAAvail= "<<vtkh::IsCUDAAvailable()<<std::endl;
 
+#if 0  
   if (device == "serial")
       if (vtkh::IsSerialAvailable()) vtkh::ForceSerial();
       else throw "Serial device not available!";
@@ -168,9 +169,10 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
       if (vtkh::IsCUDAAvailable()) vtkh::ForceCUDA();
       else throw "CUDA device not available";
 
-//  std::string dev = vtkh::GetCurrentDevice();
+  std::string dev = vtkh::GetCurrentDevice();
   if (rank == 0) std::cout<<" ***** Current Device= "<<vtkh::GetCurrentDevice()<<std::endl;
-
+#endif
+#if 0  
   if (args["--box"] != "")
   {
       std::string s, str = args["--box"];
@@ -197,7 +199,7 @@ TEST(vtkh_particle_advection, vtkh_serial_particle_advection)
 
   //streamline.SetSeedPoint(vtkm::Vec3f(1,1,1));
   streamline.SetBatchSize(std::stoi(args["--batchSize"]));
-
+#endif
   streamline.Update();
   vtkh::DataSet *streamline_output = streamline.GetOutput();
 
@@ -222,7 +224,7 @@ int main(int argc, char* argv[])
     args["--box"] = "";
     args["--threaded"] = "0";
     args["--statsfile"] = "";
-    args["--device"] = "serial";
+    //args["--device"] = "serial";
     args["--residentTime"] = "";
     args["--delaySend"] = "0";
 

@@ -7,13 +7,18 @@
 #include <vtkh/filters/ParticleAdvection.hpp>
 #include <vtkh/filters/communication/BoundsMap.hpp>
 
-#ifdef VTKH_ENABLE_LOGGING
-#define DBG(msg) vtkh::Logger::GetInstance("out")->GetStream()<<msg
-#define WDBG(msg) vtkh::Logger::GetInstance("wout")->GetStream()<<msg
-#else
-#define DBG(msg)
-#define WDBG(msg)
-#endif
+//#ifdef VTKH_ENABLE_LOGGING
+//#define DBG(msg) vtkh::Logger::GetInstance("out")->GetStream()<<msg
+//#define WDBG(msg) vtkh::Logger::GetInstance("wout")->GetStream()<<msg
+//#else
+//#define DBG(msg)
+//#define WDBG(msg)
+//#endif
+
+#define THRESHOLD 125
+#define FACTOR .95
+
+#define CPUONLY
 
 namespace vtkh
 {
@@ -29,13 +34,25 @@ public:
         boundsMap(bmap),
         filter(pa),
         sleepUS(100),
-        batchSize(-1)
+	batchSize(-1)
     {
         m_Rank = vtkh::GetMPIRank();
         m_NumRanks = vtkh::GetMPISize();
         communicator.RegisterMessages(2, std::min(64, m_NumRanks-1), 128, std::min(64, m_NumRanks-1));
-        ADD_TIMER("worker_sleep");
-        ADD_COUNTER("worker_naps");
+        //ADD_TIMER("worker_sleep");
+        //ADD_COUNTER("worker_naps");
+        // Adding Events
+        //stats.AddEvent("CPU_Advect");
+        //stats.AddEvent("GPU_Advect");
+        //stats.AddEvent("CPU_Sleep");
+        //stats.AddEvent("GPU_Sleep");
+
+        ADD_TIMER("CPUworker_sleep");
+        ADD_TIMER("GPUworker_sleep");
+        ADD_COUNTER("CPUworker_naps");
+        ADD_COUNTER("GPUworker_naps");
+        ADD_COUNTER("GPU");
+        ADD_COUNTER("CPU");
     }
     ~ParticleAdvectionTask()
     {
@@ -46,48 +63,37 @@ public:
         numWorkerThreads = 1;
         TotalNumParticles = N;
         sleepUS = _sleepUS;
-        batchSize = _batchSize;
-        active.Assign(particles);
+        almostDone = 60000; //(N * .95);
+	batchSize = _batchSize;
+
+        if (OracleDecidedToUseGPU((N/m_NumRanks))) {
+          activeG.Assign(particles);
+          //DBG("Oracle started with GPU"<<std::endl);
+        }
+        else {
+          activeC.Assign(particles);
+          //DBG("Oracle started with CPU instead"<<std::endl);
+        }
+
         inactive.Clear();
         terminated.Clear();
     }
 
-    bool GetActiveParticles(std::vector<Particle> &particles)
+    int OracleDecidedToUseGPU(int n)
     {
-        std::vector<Particle> ps;
-
-        active.Get(ps);
-        if (ps.empty())
-            return false;
-
-        std::map<int,int> domCount;
-        for (auto &p : ps)
-            domCount[p.blockIds[0]]++;
-
-        if (domCount.size() == 1)
-        {
-            particles = ps;
-            return true;
-        }
-
-        int maxDom = -1, maxVal = -1;
-        for (auto &i : domCount)
-            if (i.second > maxVal)
-            {
-                maxDom = i.first;
-                maxVal = i.second;
-            }
-
-        std::vector<Particle> otherP;
-        for (auto &p : ps)
-            if (p.blockIds[0] == maxDom)
-                particles.push_back(p);
-            else
-                otherP.push_back(p);
-
-        active.Insert(otherP);
-
-        return true;
+#ifdef ONLYGPU
+      return 1; //run on GPU only
+#endif
+#ifdef CPUONLY
+      return 0; //run on CPU only
+#endif
+#ifdef ORACLE1
+      if(n <= (THRESHOLD))
+        return 0; //run on CPU
+      else
+        return 1; //run on GPU
+#endif
+      return 0; //shouldn't get to this point...
     }
 
     bool CheckDone()
@@ -123,8 +129,10 @@ public:
 
     void Go()
     {
-        DBG("Go_bm: "<<boundsMap<<std::endl);
-        DBG("actives= "<<active<<std::endl);
+        //DBG("Go_bm: "<<boundsMap<<std::endl);
+        //DBG("actives " << std::endl
+          // << "CPU : " << activeC << std::endl
+          // << "GPU : " << activeG << std::endl);
 
 #ifdef VTKH_USE_OPENMP
         #pragma omp parallel sections num_threads(2)
@@ -139,11 +147,12 @@ public:
             #pragma omp parallel num_threads(numWorkerThreads)
             #pragma omp master
             {
-                this->Work();
+                this->cpuWork();
             }
         }
 #else
-        workerThreads.push_back(std::thread(ParticleAdvectionTask::Worker, this));
+        workerThreads.push_back(std::thread(ParticleAdvectionTask::cpuWorker, this));
+        workerThreads.push_back(std::thread(ParticleAdvectionTask::gpuWorker, this));
         this->Manage();
         for (auto &t : workerThreads)
             t.join();
@@ -151,38 +160,51 @@ public:
     }
 
 #ifndef VTKH_USE_OPENMP
-    static void Worker(ParticleAdvectionTask *t)
+    static void cpuWorker(ParticleAdvectionTask *t)
     {
-      t->Work();
+      t->cpuWork();
+    }
+
+    static void gpuWorker(ParticleAdvectionTask *t)
+    {
+      t->gpuWork();
     }
 #endif
 
-    void Work()
+    void cpuWork()
     {
-      std::vector<ResultT> traces;
+      std::vector<ResultT> tracesC;
+      vtkm::cont::RuntimeDeviceTracker &device_tracker
+                                       = vtkm::cont::GetRuntimeDeviceTracker();
+
+      if(device_tracker.CanRunOn(vtkm::cont::DeviceAdapterTagOpenMP())) {
+        device_tracker.ForceDevice(vtkm::cont::DeviceAdapterTagOpenMP());
+      }
+      else
+      {
+        std::stringstream msg;
+        msg << "CPU thread Failed to set up Device Tag OpenMP " << std::endl;
+        throw Error(msg.str());
+      }
 
         while (!CheckDone())
         {
-            std::vector<Particle> particles;
-            if (GetActiveParticles(particles))
+            std::vector<Particle> particlesC;
+            if (activeC.Get(particlesC))
             {
                 std::vector<Particle> I, T, A;
 
-                DataBlockIntegrator *blk = filter->GetBlock(particles[0].blockIds[0]);
+                workingOnC = particlesC.size();
+                COUNTER_INC("CPU", 1);
 
-                TIMER_START("advect");
-                EVENT_BEGIN("integrate");
-                WDBG("WORKER: Integrate "<<particles<<" --> "<<std::endl);
-                int n;
-                if (batchSize == -1)
-                    n = filter->InternalIntegrate<ResultT>(*blk, particles, I, T, A, traces);
-                else
-                    n = filter->InternalIntegrate<ResultT>(*blk, particles, I, T, A, traces, worker_inactive);
+                DataBlockIntegrator *blkC = filter->GetBlock(particlesC[0].blockIds[0]);
 
-                EVENT_END("integrate");
-                TIMER_STOP("advect");
-                COUNTER_INC("advectSteps", n);
-                WDBG("TIA: "<<T<<" "<<I<<" "<<A<<std::endl<<std::endl);
+                //stats.Begin("CPU_Advect");
+                TIMER_START("advectC");
+                int n = filter->InternalIntegrate<ResultT>(*blkC, particlesC, I, T, A, tracesC);
+                TIMER_STOP("advectC");
+                //stats.End("CPU_Advect");
+                COUNTER_INC("advectStepsC", n);
 
                 worker_terminated.Insert(T);
                 worker_active.Insert(A);
@@ -190,28 +212,76 @@ public:
             }
             else
             {
-                TIMER_START("worker_sleep");
+                //stats.Begin("CPU_Sleep");
+                TIMER_START("CPUworker_sleep");
                 usleep(sleepUS);
-                TIMER_STOP("worker_sleep");
-                COUNTER_INC("worker_naps", 1);
+                TIMER_STOP("CPUworker_sleep");
+                //stats.End("CPU_Sleep");
+                COUNTER_INC("CPUworker_naps", 1);
             }
         }
-        WDBG("WORKER is DONE"<<std::endl);
-        results.Insert(traces);
+        results.Insert(tracesC);
+    }
+
+    void gpuWork()
+    {
+      std::vector<ResultT> tracesG;
+      vtkm::cont::RuntimeDeviceTracker &device_tracker
+                                       = vtkm::cont::GetRuntimeDeviceTracker();
+
+      if(device_tracker.CanRunOn(vtkm::cont::DeviceAdapterTagCuda())) {
+        device_tracker.ForceDevice(vtkm::cont::DeviceAdapterTagCuda());
+      }
+      else
+      {
+        std::stringstream msg;
+        msg << "GPU thread Failed to set up Device Adapter Tag CUDA " << std::endl;
+        throw Error(msg.str());
+      }
+
+        while (!CheckDone())
+        {
+            std::vector<Particle> particlesG;
+            if (activeG.Get(particlesG))
+            {
+                std::vector<Particle> I, T, A;
+
+                workingOnG = particlesG.size();
+                COUNTER_INC("GPU", 1);
+
+                DataBlockIntegrator *blkG = filter->GetBlock(m_Rank + 1000);
+
+                //stats.Begin("GPU_Advect");
+                TIMER_START("advectG");
+                int n = filter->InternalIntegrate<ResultT>(*blkG, particlesG, I, T, A, tracesG);
+                TIMER_STOP("advectG");
+                //stats.End("GPU_Advect");
+                COUNTER_INC("advectStepsG", n);
+
+                worker_terminated.Insert(T);
+                worker_active.Insert(A);
+                worker_inactive.Insert(I);
+            }
+            else
+            {
+                //stats.Begin("GPU_Sleep");
+                TIMER_START("GPUworker_sleep");
+                usleep(sleepUS);
+                TIMER_STOP("GPUworker_sleep");
+                //stats.End("GPU_Sleep");
+                COUNTER_INC("GPUworker_naps", 1);
+            }
+        }
+        results.Insert(tracesG);
     }
 
     void Manage()
     {
-        DBG("manage_bm: "<<boundsMap<<std::endl);
-
         int N = 0;
-
-        DBG("Begin TIA: "<<terminated<<" "<<inactive<<" "<<active<<std::endl);
         MPI_Comm mpiComm = MPI_Comm_f2c(vtkh::GetMPICommHandle());
 
         while (true)
         {
-            DBG("MANAGE TIA: "<<terminated<<" "<<worker_inactive<<" "<<active<<std::endl<<std::endl);
             std::vector<Particle> out, in, term;
             worker_inactive.Get(out);
             worker_terminated.Get(term);
@@ -220,8 +290,15 @@ public:
             communicator.Exchange(out, in, term, numTermMessages);
             int numTerm = term.size() + numTermMessages;
 
-            if (!in.empty())
-                active.Insert(in);
+            if (!in.empty()) {
+              if (OracleDecidedToUseGPU((workingOnG + activeG.Size() + in.size()))) {
+                activeG.Insert(in);
+              }
+              else {
+                activeC.Insert(in);
+              }
+              /* At some point, I can Get a certain number of elements of the TSC to put into the active queues */
+            }
             if (!term.empty())
                 terminated.Insert(term);
 
@@ -231,8 +308,8 @@ public:
             if (N == TotalNumParticles)
                 break;
 
-            if (active.Empty())
-            {
+            if (activeC.Empty() && activeG.Empty())
+            {//Could eventually put the advect particle code here
                 TIMER_START("sleep");
                 usleep(sleepUS);
                 TIMER_STOP("sleep");
@@ -240,9 +317,6 @@ public:
                 communicator.CheckPendingSendRequests();
             }
         }
-        DBG("TIA: "<<terminated<<" "<<inactive<<" "<<active<<" WI= "<<worker_inactive<<std::endl);
-        DBG("RESULTS= "<<results.Size()<<std::endl);
-        DBG("DONE_"<<m_Rank<<" "<<terminated<<" "<<active<<" "<<inactive<<std::endl);
         SetDone();
     }
 
@@ -257,13 +331,16 @@ public:
     using ResultsVec = vtkh::ThreadSafeContainer<ResultT, std::vector>;
 
     ParticleMessenger communicator;
-    ParticleList active, inactive, terminated;
+    ParticleList activeC, activeG, inactive, terminated;
     ParticleList worker_active, worker_inactive, worker_terminated;
     ResultsVec results;
 
     int numWorkerThreads;
     int sleepUS;
     int batchSize;
+    int numSteps = 0;
+    int workingOnC = 0, workingOnG = 0;
+    int almostDone = 0;
 
     bool done, begin;
     vtkh::Mutex stateLock;
@@ -273,3 +350,4 @@ public:
 }
 
 #endif //VTK_H_PARTICLE_ADVECTION_TASK_HPP
+

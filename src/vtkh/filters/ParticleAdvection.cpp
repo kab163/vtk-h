@@ -8,7 +8,7 @@
 
 #include <vtkh/vtkh.hpp>
 #include <vtkh/Error.hpp>
-#include <vtkh/Logger.hpp>
+//#include <vtkh/Logger.hpp>
 #include <vtkh/utils/StreamUtil.hpp>
 #include <vtkh/utils/ThreadSafeContainer.hpp>
 
@@ -21,13 +21,13 @@
 #include <vtkh/filters/ParticleAdvectionTask.hpp>
 #endif
 
-#ifdef VTKH_ENABLE_LOGGING
-#define DBG(msg) vtkh::Logger::GetInstance("out")->GetStream()<<msg
-#define WDBG(msg) vtkh::Logger::GetInstance("wout")->GetStream()<<msg
-#else
-#define DBG(msg)
-#define WDBG(msg)
-#endif
+//#ifdef VTKH_ENABLE_LOGGING
+//#define DBG(msg) vtkh::Logger::GetInstance("out")->GetStream()<<msg
+//#define WDBG(msg) vtkh::Logger::GetInstance("wout")->GetStream()<<msg
+//#else
+//#define DBG(msg)
+//#define WDBG(msg)
+//#endif
 
 namespace vtkh
 {
@@ -87,6 +87,7 @@ void ParticleAdvection::PreExecute()
     this->m_input->GetDomain(i, dom, id);
 
     dataBlocks.push_back(new DataBlockIntegrator(id, &dom, m_field_name, stepSize, batchSize, rank));
+    dataBlocks.push_back(new DataBlockIntegrator(id + 1000, &dom, m_field_name, stepSize, batchSize, rank));
     boundsMap.AddBlock(id, dom.GetCoordinateSystem().GetBounds());
   }
 
@@ -142,11 +143,12 @@ void ParticleAdvection::TraceMultiThread(std::vector<ResultT> &traces)
 template<>
 int
 ParticleAdvection::InternalIntegrate<vtkm::worklet::ParticleAdvectionResult>(DataBlockIntegrator &blk,
-                                                                             std::vector<Particle> &v,
-                                                                             std::vector<Particle> &I,
-                                                                             std::vector<Particle> &T,
-                                                                             std::vector<Particle> &A,
-                                          std::vector<vtkm::worklet::ParticleAdvectionResult> &traces)
+                                     std::vector<Particle> &v,
+                                     std::vector<Particle> &I,
+                                     std::vector<Particle> &T,
+                                     std::vector<Particle> &A,
+                                     std::vector<vtkm::worklet::ParticleAdvectionResult> &traces
+                                     )
 {
   return blk.integrator.Advect(v, maxSteps, I, T, A, statsDB, &traces);
 }
@@ -182,20 +184,6 @@ ParticleAdvection::InternalIntegrate<vtkm::worklet::StreamlineResult>(DataBlockI
   return blk.integrator.Trace(v, maxSteps, I, T, A, &traces);
 }
 
-template<>
-int
-ParticleAdvection::InternalIntegrate<vtkm::worklet::StreamlineResult>(DataBlockIntegrator &blk,
-                                     std::vector<Particle> &v,
-                                     std::vector<Particle> &I,
-                                     std::vector<Particle> &T,
-                                     std::vector<Particle> &A,
-                                     std::vector<vtkm::worklet::StreamlineResult> &traces,
-                                     vtkh::ThreadSafeContainer<Particle, std::vector> &workerInactive)
-{
-  throw "UNDEFINED for streamlines!";
-  //return blk.integrator.Trace(v, maxSteps, I, T, A, &traces);
-}
-
 template <typename ResultT>
 void ParticleAdvection::TraceSingleThread(std::vector<ResultT> &traces)
 {
@@ -208,23 +196,17 @@ void ParticleAdvection::TraceSingleThread(std::vector<ResultT> &traces)
   int N = 0;
   while (true)
   {
-      DBG("MANAGE: termCount= "<<terminated.size()<<std::endl<<std::endl);
       std::vector<Particle> v, I, T, A;
 
       if (GetActiveParticles(v))
       {
           COUNTER_INC("myParticles", v.size());
-          DBG("GetActiveParticles: "<<v<<std::endl);
           DataBlockIntegrator *blk = GetBlock(v[0].blockIds[0]);
-          DBG("Integrate: "<<v<<std::endl);
-          DBG("Loading Block: "<<v[0].blockIds[0]<<std::endl);
 
           TIMER_START("advect");
           int n = InternalIntegrate<ResultT>(*blk, v, I, T, A, traces);
           TIMER_STOP("advect");
           COUNTER_INC("advectSteps", n);
-          DBG("--Integrate:  ITA: "<<I<<" "<<T<<" "<<A<<std::endl);
-          DBG("                   I= "<<I<<std::endl);
           if (!A.empty())
               active.insert(active.end(), A.begin(), A.end());
       }
@@ -241,7 +223,6 @@ void ParticleAdvection::TraceSingleThread(std::vector<ResultT> &traces)
 
       N += numTerm;
 
-      DBG("Manage: N= "<<N<<std::endl);
       if (N > totalNumSeeds)
           throw "Particle count error";
 
@@ -256,25 +237,13 @@ void ParticleAdvection::TraceSingleThread(std::vector<ResultT> &traces)
           COUNTER_INC("naps", 1);
       }
   }
-  DBG("TIA: "<<terminated.size()<<" "<<inactive.size()<<" "<<active.size()<<std::endl);
-  DBG("RESULTS= "<<traces.size()<<std::endl);
-
-  DBG("All done"<<std::endl);
 #endif
 }
 
 template <typename ResultT>
 void ParticleAdvection::TraceSeeds(std::vector<ResultT> &traces)
 {
-#ifdef VTKH_PARALLEL
-  MPI_Barrier(MPI_COMM_WORLD);
-  eventT0 = MPI_Wtime();
-#else
-  eventT0 = -1;
-#endif
-  SET_EVENT_T0(eventT0);
   TIMER_START("total");
-  EVENT_BEGIN("main");
 
   if (useThreadedVersion)
       TraceMultiThread<ResultT>(traces);
@@ -282,14 +251,15 @@ void ParticleAdvection::TraceSeeds(std::vector<ResultT> &traces)
       TraceSingleThread<ResultT>(traces);
 
   TIMER_STOP("total");
-  EVENT_END("main");
-  DUMP_STATS(statsFile);
+  DUMP_STATS("particleAdvection.stats.txt");
 }
 
 void ParticleAdvection::DoExecute()
 {
   this->Init();
   this->CreateSeeds();
+  //if (this->dumpOutputFiles)
+  //  this->DumpDS(0);
 
   if(!gatherTraces)
   {
@@ -297,6 +267,7 @@ void ParticleAdvection::DoExecute()
     this->TraceSeeds<vtkm::worklet::ParticleAdvectionResult>(particleTraces);
     this->m_output = new DataSet();
 
+    //KB fix
     if (!particleTraces.empty() && this->dumpOutputFiles)
     {
         vtkm::Id totalNumPts = 0;
@@ -331,8 +302,8 @@ void ParticleAdvection::DoExecute()
     this->TraceSeeds<vtkm::worklet::StreamlineResult>(particleTraces);
 
     this->m_output = new DataSet();
-    //std::cout<<"All done: "<<particleTraces.size()<<std::endl;
 
+    //KB fix
     if (!particleTraces.empty() && this->dumpOutputFiles)
     {
         vtkm::Id totalNumPts = 0;
@@ -363,7 +334,7 @@ void ParticleAdvection::DoExecute()
         DumpTraces(positions, ids);
     }
 
-#if 0
+  #if 0
     //Compact all the traces into a single dataset.
     if (!particleTraces.empty())
     {
@@ -372,10 +343,10 @@ void ParticleAdvection::DoExecute()
         std::vector<vtkm::Id> offsets(particleTraces.size(), 0), numLines(particleTraces.size(),0);
         for (int i = 0; i < particleTraces.size(); i++)
         {
-            vtkm::Id n = particleTraces[i].Positions.GetNumberOfValues();
+            vtkm::Id n = particleTraces[i].positions.GetNumberOfValues();
             offsets[i] = n;
             totalNumPts += n;
-            n = particleTraces[i].PolyLines.GetNumberOfCells();
+            n = particleTraces[i].polyLines.GetNumberOfCells();
             totalNumCells += n;
             numLines[i] = n;
 
@@ -388,7 +359,7 @@ void ParticleAdvection::DoExecute()
         vtkm::Id idx = 0;
         for (int i = 0; i < particleTraces.size(); i++)
         {
-            auto inP = particleTraces[i].Positions.GetPortalConstControl();
+            auto inP = particleTraces[i].positions.GetPortalConstControl();
             for (int j = 0; j < offsets[i]; j++, idx++)
                 posPortal.Set(idx, inP.Get(j));
         }
@@ -413,12 +384,12 @@ void ParticleAdvection::DoExecute()
             if (i > 0)
                 offset = offsets[i-1];
 
-            vtkm::Id n = particleTraces[i].PolyLines.GetNumberOfCells();
+            vtkm::Id n = particleTraces[i].polyLines.GetNumberOfCells();
             vtkm::cont::ArrayHandle<vtkm::Id> ids;
 
             for (vtkm::Id j = 0; j < n; j++)
             {
-                particleTraces[i].PolyLines.GetIndices(j, ids);
+                particleTraces[i].polyLines.GetIndices(j, ids);
                 vtkm::Id nids = ids.GetNumberOfValues();
                 auto idsPortal = ids.GetPortalControl();
                 for (vtkm::Id k = 0; k < nids; k++, connIdx++)
@@ -430,8 +401,7 @@ void ParticleAdvection::DoExecute()
 
         //Create a single polyLines cell set.
         vtkm::cont::CellSetExplicit<> polyLines;
-        auto new_offsets = vtkm::cont::ConvertNumIndicesToOffsets(cellCounts);
-        polyLines.Fill(positions.GetNumberOfValues(), cellTypes, connectivity, new_offsets);
+        polyLines.Fill(positions.GetNumberOfValues(), cellTypes, cellCounts, connectivity);
 
         vtkm::cont::DataSet ds;
         vtkm::cont::CoordinateSystem outputCoords("coordinates", positions);
@@ -439,14 +409,14 @@ void ParticleAdvection::DoExecute()
         ds.SetCellSet(polyLines);
         this->m_output->AddDomain(ds, rank);
         if (this->dumpOutputFiles)
-            this->DumpTraces(positions);
+            this->DumpSLOutput(&ds, rank, 0);
     }
     else
     {
         if (this->dumpOutputFiles)
             this->DumpSLOutput(NULL, rank, 0);
     }
-#endif
+  #endif
   }
 }
 
@@ -574,11 +544,13 @@ ParticleAdvection::Init()
   //Initialize timers/counters.
   ADD_TIMER("total");
   ADD_TIMER("sleep");
-  ADD_TIMER("advect");
+  ADD_TIMER("advectC");
+  ADD_TIMER("advectG");
   ADD_TIMER("batchProcess");
   ADD_TIMER("batchCopyParticles");
   ADD_TIMER("residentTime");
-  ADD_COUNTER("advectSteps");
+  ADD_COUNTER("advectStepsC");
+  ADD_COUNTER("advectStepsG");  
   ADD_COUNTER("myParticles");
   ADD_COUNTER("naps");
   ADD_COUNTER("beginParticles");
@@ -586,6 +558,7 @@ ParticleAdvection::Init()
   ADD_COUNTER("batchSends");
   ADD_EVENT("main");
   ADD_EVENT("integrate");
+
 }
 
 DataBlockIntegrator *
@@ -633,16 +606,18 @@ ParticleAdvection::BoxOfSeeds(const vtkm::Bounds &box,
           id = rank*N+i;
 
       Particle p;
+      /*p.id = id;
+      p.coords[0] = randRange(boxRange[0], boxRange[1]);
+      p.coords[1] = randRange(boxRange[2], boxRange[3]);
+      p.coords[2] = randRange(boxRange[4], boxRange[5]);
+      seeds.push_back(p);*/
+
       p.p.ID = id;
       p.p.Pos[0] = randRange(boxRange[0], boxRange[1]);
       p.p.Pos[1] = randRange(boxRange[2], boxRange[3]);
       p.p.Pos[2] = randRange(boxRange[4], boxRange[5]);
       seeds.push_back(p);
   }
-
-#ifdef VTKH_PARALLEL
-  MPI_Barrier(MPI_COMM_WORLD);
-#endif
 }
 
 void
@@ -675,15 +650,6 @@ ParticleAdvection::CreateSeeds()
         seeds.push_back(p);
     }
 
-    /*
-    if (seeds.size() == 1)
-    {
-        seeds[0].p.Pos[0] =  7.49762;
-        seeds[0].p.Pos[1] = -3.61333;
-        seeds[0].p.Pos[2] =  4.79515;
-    }
-    */
-
     //Set the blockIds for each seed.
     std::vector<std::vector<int>> domainIds;
     boundsMap.FindBlockIDs(seeds, domainIds);
@@ -693,14 +659,12 @@ ParticleAdvection::CreateSeeds()
         {
             seeds[i].blockIds = domainIds[i];
             active.push_back(seeds[i]);
-            if (domainIds[i].size() > 1) DBG("WE have a DUP: "<<seeds[i]<<std::endl);
+//            if (domainIds[i].size() > 1) DBG("WE have a DUP: "<<seeds[i]<<std::endl);
+
         }
     }
 
     totalNumSeeds = active.size() + inactive.size();
-    COUNTER_INC("beginParticles", totalNumSeeds);
-    DBG("CreateSeeds: "<<active<<std::endl);
-    DBG("BoundsMap: "<<boundsMap<<std::endl);
 
 #ifdef VTKH_PARALLEL
     MPI_Comm mpiComm = MPI_Comm_f2c(vtkh::GetMPICommHandle());
@@ -763,5 +727,6 @@ ParticleAdvection::DumpTraces(const vtkm::cont::ArrayHandle<vtkm::Vec3f> &pts,
         }
     }
 }
+
 
 } //  namespace vtkh
